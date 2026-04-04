@@ -1,0 +1,3 @@
+return {
+    arena = "match.lua"
+}

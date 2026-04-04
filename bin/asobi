@@ -1,0 +1,12 @@
+#!/usr/bin/env lua
+
+-- Resolve the CLI's lib directory
+local script_dir = arg[0]:match("(.*/)")
+if not script_dir then script_dir = "./" end
+local cli_root = script_dir .. "../"
+
+-- Add lib/ to package path
+package.path = cli_root .. "lib/?.lua;" .. package.path
+
+local cli = require("cli")
+cli.run(cli_root, arg)
