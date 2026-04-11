@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/widgrensit/asobi-go/internal/config"
+	"github.com/widgrensit/asobi-cli/internal/config"
 )
 
 type Client struct {
-	cfg    *config.Config
-	http   *http.Client
+	cfg  *config.Config
+	http *http.Client
 }
 
 func New(cfg *config.Config) *Client {

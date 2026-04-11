@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/widgrensit/asobi-go/internal/client"
+	"github.com/widgrensit/asobi-cli/internal/client"
 )
 
 func CollectScripts(dir string) ([]client.Script, error) {

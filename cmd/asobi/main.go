@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/widgrensit/asobi-go/internal/client"
-	"github.com/widgrensit/asobi-go/internal/config"
-	"github.com/widgrensit/asobi-go/internal/deploy"
+	"github.com/widgrensit/asobi-cli/internal/client"
+	"github.com/widgrensit/asobi-cli/internal/config"
+	"github.com/widgrensit/asobi-cli/internal/deploy"
 )
 
 func main() {
