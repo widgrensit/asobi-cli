@@ -19,7 +19,7 @@ type Client struct {
 func New(cfg *config.Config) *Client {
 	return &Client{
 		cfg:  cfg,
-		http: &http.Client{Timeout: 30 * time.Second},
+		http: &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
@@ -67,9 +67,16 @@ func (c *Client) Deploy(scripts []Script) (*DeployResponse, error) {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if len(data) == 0 {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return &DeployResponse{Deployed: len(scripts)}, nil
+		}
+		return nil, fmt.Errorf("deploy failed (%d): empty response", resp.StatusCode)
+	}
+
 	var result DeployResponse
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+		return nil, fmt.Errorf("parse response (%d): %s", resp.StatusCode, string(data))
 	}
 
 	if resp.StatusCode != 200 {
