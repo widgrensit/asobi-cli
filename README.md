@@ -49,9 +49,32 @@ asobi deploy game/
 | `asobi logout` | Clear stored credentials |
 | `asobi whoami` | Show current session info |
 | `asobi deploy <dir>` | Deploy Lua scripts to the engine |
+| `asobi deploy --ephemeral [--name N] [--json]` | Create a fresh ephemeral env (1h TTL) and return env_id + api_key |
+| `asobi destroy <env_id>` | Delete an environment and revoke its keys (idempotent) |
+| `asobi env list [--ephemeral] [--json]` | List environments for the current game |
 | `asobi health` | Check engine health |
 | `asobi config set <k> <v>` | Set manual config (`url`, `api_key`) |
 | `asobi config show` | Show current config |
+
+## Ephemeral deploys (CI)
+
+For CI integration tests, use `--ephemeral` to create a fresh isolated env
+that auto-deletes after 1 hour:
+
+```bash
+DEPLOY=$(asobi deploy --ephemeral --json)
+ENV_ID=$(echo "$DEPLOY" | jq -r .env_id)
+ASOBI_API_KEY=$(echo "$DEPLOY" | jq -r .api_key)
+
+# Trap ensures cleanup even on failure
+trap "asobi destroy $ENV_ID" EXIT
+
+# ... run tests against the ephemeral env ...
+```
+
+The 1-hour TTL is a safety net — if `trap` doesn't fire (runner timeout,
+cancelled job), the server-side reaper deletes the env automatically within
+5 minutes of expiry. No manual cleanup needed.
 
 ### Login options
 
