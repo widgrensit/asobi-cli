@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/widgrensit/asobi-cli/internal/auth"
 	"github.com/widgrensit/asobi-cli/internal/client"
@@ -10,7 +14,7 @@ import (
 	"github.com/widgrensit/asobi-cli/internal/deploy"
 )
 
-const defaultSaasURL = "https://app.asobi.dev"
+const defaultSaasURL = "https://app-dev.asobi.dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -27,6 +31,10 @@ func main() {
 		cmdWhoami()
 	case "deploy":
 		cmdDeploy()
+	case "destroy":
+		cmdDestroy()
+	case "env":
+		cmdEnv()
 	case "health":
 		cmdHealth()
 	case "config":
@@ -48,6 +56,10 @@ Usage:
   asobi logout               Clear stored credentials
   asobi whoami               Show current credential info
   asobi deploy <dir>         Deploy Lua scripts to the engine
+  asobi deploy --ephemeral   Create a fresh ephemeral env (1h TTL) + deploy
+  asobi destroy <env_id>     Delete an environment and revoke its keys
+  asobi env list             List environments for the current game
+  asobi env list --ephemeral List only ephemeral environments
   asobi health               Check engine health
   asobi config set <k> <v>   Set config (url, api_key, saas_url)
   asobi config show          Show current config
@@ -134,8 +146,35 @@ func cmdWhoami() {
 
 func cmdDeploy() {
 	dir := "."
-	if len(os.Args) > 2 {
-		dir = os.Args[2]
+	ephemeral := false
+	jsonOut := false
+	envName := ""
+
+	args := os.Args[2:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--ephemeral":
+			ephemeral = true
+		case "--json":
+			jsonOut = true
+		case "--name":
+			if i+1 >= len(args) {
+				fatal("--name requires a value")
+			}
+			i++
+			envName = args[i]
+		default:
+			if !strings.HasPrefix(args[i], "--") {
+				dir = args[i]
+			} else {
+				fatal("unknown deploy flag: %s", args[i])
+			}
+		}
+	}
+
+	if ephemeral {
+		cmdDeployEphemeral(envName, jsonOut)
+		return
 	}
 
 	engineURL, apiKey := resolveDeployCredentials()
@@ -152,15 +191,19 @@ func cmdDeploy() {
 	for _, s := range scripts {
 		fmt.Printf("  %s (%d bytes)\n", s.Path, len(s.Content))
 	}
+	fmt.Println()
 
 	cfg := &config.Config{URL: engineURL, APIKey: apiKey}
 	c := client.New(cfg)
+
+	stop := startSpinner()
 	result, err := c.Deploy(scripts)
+	stop()
 	if err != nil {
 		fatal("%v", err)
 	}
 
-	fmt.Printf("\nDeployed %d scripts.\n", result.Deployed)
+	fmt.Printf("\r\033[K🦝 Deployed %d scripts successfully!\n", result.Deployed)
 }
 
 func resolveDeployCredentials() (engineURL, apiKey string) {
@@ -265,7 +308,145 @@ func cmdConfig() {
 	}
 }
 
+func startSpinner() func() {
+	frames := []string{
+		"🦝 Deploying.  ",
+		"🦝 Deploying.. ",
+		"🦝 Deploying...",
+	}
+	var once sync.Once
+	done := make(chan struct{})
+	go func() {
+		i := 0
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				fmt.Printf("\r%s", frames[i%len(frames)])
+				i++
+				time.Sleep(400 * time.Millisecond)
+			}
+		}
+	}()
+	return func() {
+		once.Do(func() { close(done) })
+	}
+}
+
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// --- Ephemeral deploy ---
+
+func cmdDeployEphemeral(name string, jsonOut bool) {
+	creds, err := auth.LoadCredentials()
+	if err != nil || creds == nil || creds.AccessToken == "" {
+		fatal("not logged in. Run: asobi login")
+	}
+
+	if !jsonOut {
+		fmt.Println("Creating ephemeral environment (1h TTL)...")
+	}
+	resp, err := auth.EphemeralDeploy(creds, name)
+	if err != nil {
+		fatal("ephemeral-deploy: %v", err)
+	}
+
+	if jsonOut {
+		out, _ := json.Marshal(map[string]any{
+			"env_id":     resp.EnvID,
+			"api_key":    resp.RawKey,
+			"expires_in": resp.ExpiresIn,
+		})
+		fmt.Println(string(out))
+		return
+	}
+
+	fmt.Printf("\n🦝 Ephemeral environment created!\n")
+	fmt.Printf("  env_id:     %s\n", resp.EnvID)
+	fmt.Printf("  api_key:    %s\n", resp.RawKey)
+	fmt.Printf("  expires_in: %ds (~%dm)\n", resp.ExpiresIn, resp.ExpiresIn/60)
+	fmt.Printf("\nTo destroy explicitly: asobi destroy %s\n", resp.EnvID)
+}
+
+// --- Destroy ---
+
+func cmdDestroy() {
+	if len(os.Args) < 3 {
+		fatal("destroy requires an env_id\n\nUsage: asobi destroy <env_id>")
+	}
+	envID := os.Args[2]
+
+	creds, err := auth.LoadCredentials()
+	if err != nil || creds == nil || creds.AccessToken == "" {
+		fatal("not logged in. Run: asobi login")
+	}
+
+	if err := auth.Destroy(creds, envID); err != nil {
+		fatal("%v", err)
+	}
+	fmt.Printf("Destroyed %s\n", envID)
+}
+
+// --- Env ---
+
+func cmdEnv() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: asobi env list [--ephemeral] [--json]")
+		os.Exit(1)
+	}
+
+	switch os.Args[2] {
+	case "list":
+		cmdEnvList()
+	default:
+		fatal("unknown env subcommand: %s", os.Args[2])
+	}
+}
+
+func cmdEnvList() {
+	ephemeral := false
+	jsonOut := false
+	for _, arg := range os.Args[3:] {
+		switch arg {
+		case "--ephemeral":
+			ephemeral = true
+		case "--json":
+			jsonOut = true
+		default:
+			fatal("unknown env list flag: %s", arg)
+		}
+	}
+
+	creds, err := auth.LoadCredentials()
+	if err != nil || creds == nil || creds.AccessToken == "" {
+		fatal("not logged in. Run: asobi login")
+	}
+
+	envs, err := auth.ListEnvs(creds, ephemeral)
+	if err != nil {
+		fatal("%v", err)
+	}
+
+	if jsonOut {
+		out, _ := json.Marshal(envs)
+		fmt.Println(string(out))
+		return
+	}
+
+	if len(envs) == 0 {
+		fmt.Println("No environments.")
+		return
+	}
+	fmt.Printf("%-40s %-20s %-10s %-10s %s\n", "ID", "NAME", "STATUS", "EPHEMERAL", "EXPIRES")
+	for _, e := range envs {
+		eph := "no"
+		if e.IsEphemeral {
+			eph = "yes"
+		}
+		fmt.Printf("%-40s %-20s %-10s %-10s %s\n", e.ID, e.Name, e.Status, eph, e.ExpiresAt)
+	}
 }
