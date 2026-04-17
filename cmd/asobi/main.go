@@ -156,39 +156,15 @@ func cmdWhoami() {
 // --- Deploy ---
 
 func cmdDeploy() {
+	if len(os.Args) < 3 {
+		fatal("usage: asobi deploy <env-name> [dir]")
+	}
+
+	envName := os.Args[2]
 	dir := "."
-	ephemeral := false
-	jsonOut := false
-	envName := ""
-
-	args := os.Args[2:]
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--ephemeral":
-			ephemeral = true
-		case "--json":
-			jsonOut = true
-		case "--name":
-			if i+1 >= len(args) {
-				fatal("--name requires a value")
-			}
-			i++
-			envName = args[i]
-		default:
-			if !strings.HasPrefix(args[i], "--") {
-				dir = args[i]
-			} else {
-				fatal("unknown deploy flag: %s", args[i])
-			}
-		}
+	if len(os.Args) >= 4 && !strings.HasPrefix(os.Args[3], "--") {
+		dir = os.Args[3]
 	}
-
-	if ephemeral {
-		cmdDeployEphemeral(envName, jsonOut)
-		return
-	}
-
-	engineURL, apiKey := resolveDeployCredentials()
 
 	scripts, err := deploy.CollectScripts(dir)
 	if err != nil {
@@ -198,23 +174,26 @@ func cmdDeploy() {
 		fatal("no .lua files found in %s", dir)
 	}
 
-	fmt.Printf("Deploying %d scripts to %s...\n", len(scripts), engineURL)
+	fmt.Printf("Deploying %d scripts to %s...\n", len(scripts), envName)
 	for _, s := range scripts {
 		fmt.Printf("  %s (%d bytes)\n", s.Path, len(s.Content))
 	}
-	fmt.Println()
 
-	cfg := &config.Config{URL: engineURL, APIKey: apiKey}
-	c := client.New(cfg)
-
-	stop := startSpinner()
-	result, err := c.Deploy(scripts)
-	stop()
+	bundle, err := deploy.ZipScripts(scripts)
 	if err != nil {
-		fatal("%v", err)
+		fatal("zip scripts: %v", err)
+	}
+	fmt.Printf("Bundle: %d bytes\n", len(bundle))
+
+	creds := mustLoadCreds()
+	result, err := auth.DeployBundle(creds, envName, bundle)
+	if err != nil {
+		fatal("deploy: %v", err)
 	}
 
-	fmt.Printf("\r\033[K🦝 Deployed %d scripts successfully!\n", result.Deployed)
+	gen, _ := result["generation"].(float64)
+	sha, _ := result["sha256"].(string)
+	fmt.Printf("\nDeployed! generation=%d sha256=%s\n", int(gen), sha[:12]+"...")
 }
 
 func resolveDeployCredentials() (engineURL, apiKey string) {

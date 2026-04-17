@@ -1,6 +1,8 @@
 package deploy
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,4 +44,23 @@ func CollectScripts(dir string) ([]client.Script, error) {
 	}
 
 	return scripts, nil
+}
+
+// ZipScripts creates a zip archive from collected scripts.
+func ZipScripts(scripts []client.Script) ([]byte, error) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for _, s := range scripts {
+		f, err := w.Create(s.Path)
+		if err != nil {
+			return nil, fmt.Errorf("zip create %s: %w", s.Path, err)
+		}
+		if _, err := f.Write([]byte(s.Content)); err != nil {
+			return nil, fmt.Errorf("zip write %s: %w", s.Path, err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("zip close: %w", err)
+	}
+	return buf.Bytes(), nil
 }
