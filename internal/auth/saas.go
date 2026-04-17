@@ -237,3 +237,154 @@ func ListEnvs(creds *Credentials, ephemeralOnly bool) ([]Environment, error) {
 	}
 	return result.Environments, nil
 }
+
+// CreateEnv creates a named environment with a given size.
+func CreateEnv(creds *Credentials, name, size string) (map[string]interface{}, error) {
+	body, _ := json.Marshal(map[string]string{"name": name, "size": size})
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/create", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return nil, err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return CreateEnv(creds, name, size)
+	}
+	var result map[string]interface{}
+	_ = json.Unmarshal(data, &result)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("create failed (%d): %s", resp.StatusCode, data)
+	}
+	return result, nil
+}
+
+// DeployBundle uploads a zip bundle to a named environment.
+func DeployBundle(creds *Credentials, name string, bundle []byte) (map[string]interface{}, error) {
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/deploy", bytes.NewReader(bundle))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/zip")
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return nil, err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return DeployBundle(creds, name, bundle)
+	}
+	var result map[string]interface{}
+	_ = json.Unmarshal(data, &result)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("deploy failed (%d): %s", resp.StatusCode, data)
+	}
+	return result, nil
+}
+
+// EnvAction performs stop/start on a named environment.
+func EnvAction(creds *Credentials, name, action string) error {
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/"+action, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return EnvAction(creds, name, action)
+	}
+	if resp.StatusCode >= 400 {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("%s failed (%d): %s", action, resp.StatusCode, data)
+	}
+	return nil
+}
+
+// DeleteEnv deletes a named environment.
+func DeleteEnv(creds *Credentials, name string) error {
+	req, err := http.NewRequest("DELETE", creds.SaasURL+"/internal/cli/envs/"+name, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return DeleteEnv(creds, name)
+	}
+	if resp.StatusCode >= 400 {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete failed (%d): %s", resp.StatusCode, data)
+	}
+	return nil
+}
+
+// ListEnvs2 returns environments using the new flat model.
+func ListEnvs2(creds *Credentials) ([]map[string]interface{}, error) {
+	req, err := http.NewRequest("GET", creds.SaasURL+"/internal/cli/envs", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return nil, err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return ListEnvs2(creds)
+	}
+	var result struct {
+		Environments []map[string]interface{} `json:"environments"`
+	}
+	_ = json.Unmarshal(data, &result)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("list failed (%d): %s", resp.StatusCode, data)
+	}
+	return result.Environments, nil
+}

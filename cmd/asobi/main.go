@@ -29,8 +29,18 @@ func main() {
 		cmdLogout()
 	case "whoami":
 		cmdWhoami()
+	case "create":
+		cmdCreate()
 	case "deploy":
 		cmdDeploy()
+	case "stop":
+		cmdStop()
+	case "start":
+		cmdStart()
+	case "delete":
+		cmdDelete()
+	case "envs":
+		cmdEnvs()
 	case "destroy":
 		cmdDestroy()
 	case "env":
@@ -52,18 +62,19 @@ func usage() {
 	fmt.Println(`asobi - Asobi game backend CLI
 
 Usage:
-  asobi login                Login via browser (device-code flow)
-  asobi logout               Clear stored credentials
-  asobi whoami               Show current credential info
-  asobi deploy <dir>         Deploy Lua scripts to the engine
-  asobi deploy --ephemeral   Create a fresh ephemeral env (1h TTL) + deploy
-  asobi destroy <env_id>     Delete an environment and revoke its keys
-  asobi env list             List environments for the current game
-  asobi env list --ephemeral List only ephemeral environments
-  asobi health               Check engine health
-  asobi config set <k> <v>   Set config (url, api_key, saas_url)
-  asobi config show          Show current config
-  asobi help                 Show this help
+  asobi login                  Login via browser (device-code flow)
+  asobi logout                 Clear stored credentials
+  asobi whoami                 Show current credential info
+  asobi create <name> [--size xs|s|m|l]  Create an environment
+  asobi deploy <name> [dir]    Deploy Lua scripts to an environment
+  asobi stop <name>            Stop an environment
+  asobi start <name>           Start an environment
+  asobi delete <name>          Delete an environment
+  asobi envs                   List your environments
+  asobi health                 Check engine health
+  asobi config set <k> <v>     Set config (url, api_key, saas_url)
+  asobi config show            Show current config
+  asobi help                   Show this help
 
 Login options:
   --saas-url <url>           SaaS URL (default: ` + defaultSaasURL + `)
@@ -449,4 +460,99 @@ func cmdEnvList() {
 		}
 		fmt.Printf("%-40s %-20s %-10s %-10s %s\n", e.ID, e.Name, e.Status, eph, e.ExpiresAt)
 	}
+}
+
+// --- New environment commands ---
+
+func cmdCreate() {
+	if len(os.Args) < 3 {
+		fatal("usage: asobi create <name> [--size xs|s|m|l]")
+	}
+	name := os.Args[2]
+	size := "xs"
+	for i := 3; i < len(os.Args); i++ {
+		if os.Args[i] == "--size" && i+1 < len(os.Args) {
+			size = os.Args[i+1]
+			i++
+		}
+	}
+
+	creds := mustLoadCreds()
+	result, err := auth.CreateEnv(creds, name, size)
+	if err != nil {
+		fatal("create: %v", err)
+	}
+	fmt.Printf("Environment created: %s (size: %s)\n", name, size)
+	if env, ok := result["environment"].(map[string]interface{}); ok {
+		if id, ok := env["id"].(string); ok {
+			fmt.Printf("  id: %s\n", id)
+		}
+	}
+}
+
+func cmdStop() {
+	if len(os.Args) < 3 {
+		fatal("usage: asobi stop <name>")
+	}
+	creds := mustLoadCreds()
+	if err := auth.EnvAction(creds, os.Args[2], "stop"); err != nil {
+		fatal("stop: %v", err)
+	}
+	fmt.Printf("Environment %s stopping\n", os.Args[2])
+}
+
+func cmdStart() {
+	if len(os.Args) < 3 {
+		fatal("usage: asobi start <name>")
+	}
+	creds := mustLoadCreds()
+	if err := auth.EnvAction(creds, os.Args[2], "start"); err != nil {
+		fatal("start: %v", err)
+	}
+	fmt.Printf("Environment %s starting\n", os.Args[2])
+}
+
+func cmdDelete() {
+	if len(os.Args) < 3 {
+		fatal("usage: asobi delete <name>")
+	}
+	creds := mustLoadCreds()
+	if err := auth.DeleteEnv(creds, os.Args[2]); err != nil {
+		fatal("delete: %v", err)
+	}
+	fmt.Printf("Environment %s deleted\n", os.Args[2])
+}
+
+func cmdEnvs() {
+	creds := mustLoadCreds()
+	envs, err := auth.ListEnvs2(creds)
+	if err != nil {
+		fatal("list: %v", err)
+	}
+	if len(envs) == 0 {
+		fmt.Println("No environments. Create one with: asobi create <name>")
+		return
+	}
+	fmt.Printf("%-20s %-6s %-15s %s\n", "NAME", "SIZE", "STATUS", "ENDPOINT")
+	for _, e := range envs {
+		name, _ := e["name"].(string)
+		size, _ := e["size"].(string)
+		if size == "" {
+			size, _ = e["resource_tier"].(string)
+		}
+		status, _ := e["provisioning_status"].(string)
+		endpoint, _ := e["endpoint_url"].(string)
+		if endpoint == "" {
+			endpoint = "-"
+		}
+		fmt.Printf("%-20s %-6s %-15s %s\n", name, strings.ToUpper(size), status, endpoint)
+	}
+}
+
+func mustLoadCreds() *auth.Credentials {
+	creds, err := auth.LoadCredentials()
+	if err != nil {
+		fatal("not logged in. Run: asobi login")
+	}
+	return creds
 }
