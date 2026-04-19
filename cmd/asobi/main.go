@@ -119,11 +119,10 @@ func cmdLogin() {
 	}
 
 	fmt.Println("\nLogin successful!")
-	fmt.Printf("  Tenant:      %s\n", creds.TenantID)
-	fmt.Printf("  Game:        %s\n", creds.GameID)
-	fmt.Printf("  Environment: %s\n", creds.EnvName)
-	fmt.Printf("  Engine:      %s\n", creds.EngineURL)
+	fmt.Printf("  Tenant: %s\n", creds.TenantID)
+	fmt.Printf("  SaaS:   %s\n", creds.SaasURL)
 	fmt.Printf("\nCredentials stored in ~/.asobi/credentials.json\n")
+	fmt.Println("Run `asobi create <name>` to create an environment.")
 }
 
 func cmdLogout() {
@@ -143,13 +142,10 @@ func cmdWhoami() {
 		return
 	}
 	fmt.Printf("Logged in via %s\n", creds.SaasURL)
-	fmt.Printf("  Tenant:      %s\n", creds.TenantID)
-	fmt.Printf("  Game:        %s\n", creds.GameID)
-	fmt.Printf("  Environment: %s\n", creds.EnvName)
-	fmt.Printf("  Engine:      %s\n", creds.EngineURL)
-	fmt.Printf("  Device:      %s\n", creds.DeviceFingerprint)
+	fmt.Printf("  Tenant: %s\n", creds.TenantID)
+	fmt.Printf("  Device: %s\n", creds.DeviceFingerprint)
 	if len(creds.AccessToken) > 8 {
-		fmt.Printf("  Token:       %s...%s\n", creds.AccessToken[:4], creds.AccessToken[len(creds.AccessToken)-4:])
+		fmt.Printf("  Token:  %s...%s\n", creds.AccessToken[:4], creds.AccessToken[len(creds.AccessToken)-4:])
 	}
 }
 
