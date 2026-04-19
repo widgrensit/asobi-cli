@@ -241,7 +241,7 @@ func ListEnvs(creds *Credentials, ephemeralOnly bool) ([]Environment, error) {
 // CreateEnv creates a named environment with a given size.
 func CreateEnv(creds *Credentials, name, size string) (map[string]interface{}, error) {
 	body, _ := json.Marshal(map[string]string{"name": name, "size": size})
-	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/create", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
