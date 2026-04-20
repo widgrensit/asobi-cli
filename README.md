@@ -21,8 +21,9 @@ ln -s $(pwd)/bin/asobi ~/bin/asobi
 # Authenticate via browser — opens the dashboard, you pick tenant/game/env
 asobi login
 
-# Deploy Lua scripts to the engine
-asobi deploy game/
+# Create an environment and deploy Lua scripts to it
+asobi create prod
+asobi deploy prod game/
 
 # Check engine health
 asobi health
@@ -33,12 +34,13 @@ asobi whoami
 
 ### Self-hosted
 
-If you run your own engine without the hosted dashboard:
+If you run your own engine without the hosted dashboard, skip `asobi login`
+and point the CLI at your engine directly:
 
 ```bash
 asobi config set url https://your-engine.example.com
 asobi config set api_key ak_your_key_here
-asobi deploy game/
+asobi deploy prod game/
 ```
 
 ## Commands
@@ -48,12 +50,17 @@ asobi deploy game/
 | `asobi login` | Authenticate via browser (ECDH device-code flow) |
 | `asobi logout` | Clear stored credentials |
 | `asobi whoami` | Show current session info |
-| `asobi deploy <dir>` | Deploy Lua scripts to the engine |
+| `asobi create <name> [--size xs\|s\|m\|l]` | Create an environment |
+| `asobi deploy <env-name> [dir]` | Deploy Lua scripts to an environment (`dir` defaults to `.`) |
 | `asobi deploy --ephemeral [--name N] [--json]` | Create a fresh ephemeral env (1h TTL) and return env_id + api_key |
-| `asobi destroy <env_id>` | Delete an environment and revoke its keys (idempotent) |
-| `asobi env list [--ephemeral] [--json]` | List environments for the current game |
+| `asobi stop <name>` | Stop a running environment |
+| `asobi start <name>` | Start a stopped environment |
+| `asobi delete <name>` | Delete an environment |
+| `asobi destroy <env_id>` | Delete by env_id and revoke its keys (idempotent; used by CI cleanup) |
+| `asobi envs` | List your environments |
+| `asobi env list [--ephemeral] [--json]` | Structured environment list for scripting |
 | `asobi health` | Check engine health |
-| `asobi config set <k> <v>` | Set manual config (`url`, `api_key`) |
+| `asobi config set <k> <v>` | Set manual config (`url`, `api_key`, `saas_url`) |
 | `asobi config show` | Show current config |
 
 ## Ephemeral deploys (CI)
