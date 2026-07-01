@@ -106,6 +106,10 @@ func cmdLogin() {
 		}
 	}
 
+	if err := config.RequireSecureURL(saasURL); err != nil {
+		fatal("%v", err)
+	}
+
 	fmt.Printf("Connecting to %s\n", saasURL)
 	fmt.Printf("Token name: %s\n", tokenName)
 
@@ -277,6 +281,9 @@ func cmdConfig() {
 		}
 		switch key {
 		case "url":
+			if err := config.RequireSecureURL(value); err != nil {
+				fatal("%v", err)
+			}
 			cfg.URL = value
 		case "api_key":
 			cfg.APIKey = value
