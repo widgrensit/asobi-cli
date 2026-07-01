@@ -19,6 +19,9 @@ type Credentials struct {
 	EnvironmentID     string `json:"environment_id"`
 	EnvName           string `json:"env_name"`
 	DeviceFingerprint string `json:"device_fingerprint"`
+	// DeviceSecret is the server-issued secret that binds the refresh token
+	// to this CLI install. Presented on refresh; never sent anywhere else.
+	DeviceSecret string `json:"device_secret"`
 }
 
 func credentialsPath() string {

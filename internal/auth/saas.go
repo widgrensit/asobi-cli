@@ -92,11 +92,11 @@ func MintKey(creds *Credentials) (string, error) {
 }
 
 // RefreshAccessToken exchanges a refresh token for a new access token.
-// The device fingerprint must match what was stored at login time.
+// The device secret issued at login must match the hash stored server-side.
 func RefreshAccessToken(creds *Credentials) (string, error) {
 	body, _ := json.Marshal(map[string]string{
-		"refresh_token":      creds.RefreshToken,
-		"device_fingerprint": creds.DeviceFingerprint,
+		"refresh_token": creds.RefreshToken,
+		"device_secret": creds.DeviceSecret,
 	})
 	url := creds.SaasURL + "/internal/cli/refresh"
 	resp, err := httpClient.Do(mustNewRequest("POST", url, body))
