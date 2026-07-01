@@ -13,8 +13,10 @@ import (
 )
 
 type startResponse struct {
-	SessionID string `json:"session_id"`
-	ExpiresIn int    `json:"expires_in"`
+	SessionID       string `json:"session_id"`
+	UserCode        string `json:"user_code"`
+	VerificationURI string `json:"verification_uri"`
+	ExpiresIn       int    `json:"expires_in"`
 }
 
 type pollResponse struct {
@@ -45,10 +47,14 @@ func Login(saasURL, tokenName string) (*Credentials, error) {
 		return nil, fmt.Errorf("start session: %w", err)
 	}
 
-	approvalURL := fmt.Sprintf("%s/dashboard/cli/login?session=%s", saasURL, startResp.SessionID)
-	fmt.Printf("\nOpen this URL to approve the CLI:\n\n  %s\n\n", approvalURL)
-	openBrowser(approvalURL)
-	fmt.Printf("Waiting for approval (expires in %ds)...\n", startResp.ExpiresIn)
+	verificationURI := startResp.VerificationURI
+	if verificationURI == "" {
+		verificationURI = saasURL + "/dashboard/cli/login"
+	}
+	fmt.Printf("\nYour verification code: %s\n\n", startResp.UserCode)
+	fmt.Printf("Go to %s and enter it to approve this CLI.\n", verificationURI)
+	openBrowser(verificationURI)
+	fmt.Printf("\nWaiting for approval (expires in %ds)...\n", startResp.ExpiresIn)
 
 	payload, err := pollForApproval(saasURL, startResp.SessionID, kp.Private)
 	if err != nil {
@@ -58,6 +64,7 @@ func Login(saasURL, tokenName string) (*Credentials, error) {
 	creds := &Credentials{
 		AccessToken:       payload.AccessToken,
 		RefreshToken:      payload.RefreshToken,
+		DeviceSecret:      payload.DeviceSecret,
 		SaasURL:           coalesce(payload.SaasURL, saasURL),
 		EngineURL:         payload.EngineURL,
 		TenantID:          payload.TenantID,
@@ -72,6 +79,7 @@ func Login(saasURL, tokenName string) (*Credentials, error) {
 type decryptedPayload struct {
 	AccessToken   string   `json:"access_token"`
 	RefreshToken  string   `json:"refresh_token"`
+	DeviceSecret  string   `json:"device_secret"`
 	SaasURL       string   `json:"saas_url"`
 	EngineURL     string   `json:"engine_url"`
 	TenantID      string   `json:"tenant_id"`
