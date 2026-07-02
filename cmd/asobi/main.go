@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +15,7 @@ import (
 	"github.com/widgrensit/asobi-cli/internal/client"
 	"github.com/widgrensit/asobi-cli/internal/config"
 	"github.com/widgrensit/asobi-cli/internal/deploy"
+	"github.com/widgrensit/asobi-cli/internal/scaffold"
 )
 
 const defaultSaasURL = "https://console.asobi.dev"
@@ -29,6 +33,10 @@ func main() {
 		cmdLogout()
 	case "whoami":
 		cmdWhoami()
+	case "games":
+		cmdGames()
+	case "use":
+		cmdUse()
 	case "create":
 		cmdCreate()
 	case "deploy":
@@ -37,10 +45,14 @@ func main() {
 		cmdStop()
 	case "start":
 		cmdStart()
+	case "resize":
+		cmdResize()
 	case "delete":
 		cmdDelete()
 	case "envs":
 		cmdEnvs()
+	case "init":
+		cmdInit()
 	case "destroy":
 		cmdDestroy()
 	case "env":
@@ -65,16 +77,24 @@ Usage:
   asobi login                  Login via browser (device-code flow)
   asobi logout                 Clear stored credentials
   asobi whoami                 Show current credential info
-  asobi create <name> [--size xs|s|m|l]  Create an environment
-  asobi deploy <name> [dir]    Deploy Lua scripts to an environment
-  asobi stop <name>            Stop an environment
-  asobi start <name>           Start an environment
-  asobi delete <name>          Delete an environment
-  asobi envs                   List your environments
+  asobi init [dir]             Scaffold a starter Lua game
+  asobi games                  List your tenant's games
+  asobi use <slug>             Set the active game
+  asobi create <name> [--size xs|s|m|l] [--game <slug>]  Create an environment
+  asobi deploy <name> [dir] [--game <slug>]    Deploy Lua scripts to an environment
+  asobi stop <name> [--game <slug>]            Stop an environment
+  asobi start <name> [--game <slug>]           Start an environment
+  asobi resize <name> --size <xs|s|m|l> [--game <slug>]  Resize an environment
+  asobi delete <name> [--game <slug>]          Delete an environment
+  asobi envs [--game <slug>]   List your environments
   asobi health                 Check engine health
   asobi config set <k> <v>     Set config (url, api_key, saas_url)
   asobi config show            Show current config
   asobi help                   Show this help
+
+Game selection:
+  Env operations resolve the game from --game, then the active game
+  (asobi use <slug>). With no game set the CLI prompts when interactive.
 
 Login options:
   --saas-url <url>           SaaS URL (default: ` + defaultSaasURL + `)
@@ -124,8 +144,10 @@ func cmdLogin() {
 
 	fmt.Println("\nLogin successful!")
 	fmt.Printf("  Tenant: %s\n", creds.TenantID)
+	fmt.Printf("  Game:   %s\n", gameLabel(creds.ActiveGame))
 	fmt.Printf("  SaaS:   %s\n", creds.SaasURL)
 	fmt.Printf("\nCredentials stored in ~/.asobi/credentials.json\n")
+	fmt.Println("Run `asobi games` to list games, then `asobi use <slug>` to pick one.")
 	fmt.Println("Run `asobi create <name>` to create an environment.")
 }
 
@@ -147,6 +169,7 @@ func cmdWhoami() {
 	}
 	fmt.Printf("Logged in via %s\n", creds.SaasURL)
 	fmt.Printf("  Tenant: %s\n", creds.TenantID)
+	fmt.Printf("  Game:   %s\n", gameLabel(creds.ActiveGame))
 	fmt.Printf("  Device: %s\n", creds.DeviceFingerprint)
 	if len(creds.AccessToken) > 8 {
 		fmt.Printf("  Token:  %s...%s\n", creds.AccessToken[:4], creds.AccessToken[len(creds.AccessToken)-4:])
@@ -156,14 +179,15 @@ func cmdWhoami() {
 // --- Deploy ---
 
 func cmdDeploy() {
-	if len(os.Args) < 3 {
-		fatal("usage: asobi deploy <env-name> [dir]")
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	if len(args) < 1 {
+		fatal("usage: asobi deploy <env-name> [dir] [--game <slug>]")
 	}
 
-	envName := os.Args[2]
+	envName := args[0]
 	dir := "."
-	if len(os.Args) >= 4 && !strings.HasPrefix(os.Args[3], "--") {
-		dir = os.Args[3]
+	if len(args) >= 2 && !strings.HasPrefix(args[1], "--") {
+		dir = args[1]
 	}
 
 	scripts, err := deploy.CollectScripts(dir)
@@ -174,7 +198,10 @@ func cmdDeploy() {
 		fatal("no .lua files found in %s", dir)
 	}
 
-	fmt.Printf("Deploying %d scripts to %s...\n", len(scripts), envName)
+	creds := mustLoadCreds()
+	game := resolveGame(gameFlag, creds)
+
+	fmt.Printf("Deploying %d scripts to %s (game: %s)...\n", len(scripts), envName, game)
 	for _, s := range scripts {
 		fmt.Printf("  %s (%d bytes)\n", s.Path, len(s.Content))
 	}
@@ -185,15 +212,14 @@ func cmdDeploy() {
 	}
 	fmt.Printf("Bundle: %d bytes\n", len(bundle))
 
-	creds := mustLoadCreds()
-	result, err := auth.DeployBundle(creds, envName, bundle)
+	result, err := auth.DeployBundle(creds, game, envName, bundle)
 	if err != nil {
 		fatal("deploy: %v", err)
 	}
 
 	gen, _ := result["generation"].(float64)
 	sha, _ := result["sha256"].(string)
-	fmt.Printf("\nDeployed! generation=%d sha256=%s\n", int(gen), sha[:12]+"...")
+	fmt.Printf("\nDeployed to %s (game: %s)! generation=%d sha256=%s\n", envName, game, int(gen), sha[:12]+"...")
 }
 
 func resolveDeployCredentials() (engineURL, apiKey string) {
@@ -447,24 +473,24 @@ func cmdEnvList() {
 // --- New environment commands ---
 
 func cmdCreate() {
-	if len(os.Args) < 3 {
-		fatal("usage: asobi create <name> [--size xs|s|m|l]")
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	sizeFlag, args := extractFlag(args, "--size")
+	if len(args) < 1 {
+		fatal("usage: asobi create <name> [--size xs|s|m|l] [--game <slug>]")
 	}
-	name := os.Args[2]
-	size := "xs"
-	for i := 3; i < len(os.Args); i++ {
-		if os.Args[i] == "--size" && i+1 < len(os.Args) {
-			size = os.Args[i+1]
-			i++
-		}
+	name := args[0]
+	size := sizeFlag
+	if size == "" {
+		size = "xs"
 	}
 
 	creds := mustLoadCreds()
-	result, err := auth.CreateEnv(creds, name, size)
+	game := resolveGame(gameFlag, creds)
+	result, err := auth.CreateEnv(creds, game, name, size)
 	if err != nil {
 		fatal("create: %v", err)
 	}
-	fmt.Printf("Environment created: %s (size: %s)\n", name, size)
+	fmt.Printf("Environment created: %s (game: %s, size: %s)\n", name, game, size)
 	if env, ok := result["environment"].(map[string]interface{}); ok {
 		if id, ok := env["id"].(string); ok {
 			fmt.Printf("  id: %s\n", id)
@@ -473,46 +499,71 @@ func cmdCreate() {
 }
 
 func cmdStop() {
-	if len(os.Args) < 3 {
-		fatal("usage: asobi stop <name>")
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	if len(args) < 1 {
+		fatal("usage: asobi stop <name> [--game <slug>]")
 	}
 	creds := mustLoadCreds()
-	if err := auth.EnvAction(creds, os.Args[2], "stop"); err != nil {
+	game := resolveGame(gameFlag, creds)
+	if err := auth.EnvAction(creds, game, args[0], "stop"); err != nil {
 		fatal("stop: %v", err)
 	}
-	fmt.Printf("Environment %s stopping\n", os.Args[2])
+	fmt.Printf("Environment %s stopping\n", args[0])
 }
 
 func cmdStart() {
-	if len(os.Args) < 3 {
-		fatal("usage: asobi start <name>")
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	if len(args) < 1 {
+		fatal("usage: asobi start <name> [--game <slug>]")
 	}
 	creds := mustLoadCreds()
-	if err := auth.EnvAction(creds, os.Args[2], "start"); err != nil {
+	game := resolveGame(gameFlag, creds)
+	if err := auth.EnvAction(creds, game, args[0], "start"); err != nil {
 		fatal("start: %v", err)
 	}
-	fmt.Printf("Environment %s starting\n", os.Args[2])
+	fmt.Printf("Environment %s starting\n", args[0])
+}
+
+func cmdResize() {
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	sizeFlag, args := extractFlag(args, "--size")
+	if len(args) < 1 {
+		fatal("usage: asobi resize <name> --size <xs|s|m|l> [--game <slug>]")
+	}
+	if sizeFlag == "" {
+		fatal("resize requires --size <xs|s|m|l>")
+	}
+	creds := mustLoadCreds()
+	game := resolveGame(gameFlag, creds)
+	if err := auth.ResizeEnv(creds, game, args[0], sizeFlag); err != nil {
+		fatal("resize: %v", err)
+	}
+	fmt.Printf("Environment %s resizing to %s\n", args[0], sizeFlag)
 }
 
 func cmdDelete() {
-	if len(os.Args) < 3 {
-		fatal("usage: asobi delete <name>")
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	if len(args) < 1 {
+		fatal("usage: asobi delete <name> [--game <slug>]")
 	}
 	creds := mustLoadCreds()
-	if err := auth.DeleteEnv(creds, os.Args[2]); err != nil {
+	game := resolveGame(gameFlag, creds)
+	if err := auth.DeleteEnv(creds, game, args[0]); err != nil {
 		fatal("delete: %v", err)
 	}
-	fmt.Printf("Environment %s deleted\n", os.Args[2])
+	fmt.Printf("Environment %s deleted\n", args[0])
 }
 
 func cmdEnvs() {
+	gameFlag, _ := extractFlag(os.Args[2:], "--game")
 	creds := mustLoadCreds()
-	envs, err := auth.ListEnvs2(creds)
+	game := resolveGame(gameFlag, creds)
+	envs, err := auth.ListEnvs2(creds, game)
 	if err != nil {
 		fatal("list: %v", err)
 	}
 	if len(envs) == 0 {
-		fmt.Println("No environments. Create one with: asobi create <name>")
+		fmt.Printf("No environments for %s. Create one with: asobi create <name> --game %s\n", game, game)
 		return
 	}
 	fmt.Printf("%-20s %-6s %-15s %s\n", "NAME", "SIZE", "STATUS", "ENDPOINT")
@@ -531,9 +582,164 @@ func cmdEnvs() {
 	}
 }
 
+// --- Games ---
+
+func cmdGames() {
+	creds := mustLoadCreds()
+	games, err := auth.ListGames(creds)
+	if err != nil {
+		fatal("games: %v", err)
+	}
+	if len(games) == 0 {
+		fmt.Println("No games in this tenant.")
+		return
+	}
+	fmt.Printf("%-2s %-24s %s\n", "", "SLUG", "NAME")
+	for _, g := range games {
+		marker := "  "
+		if g.Slug == creds.ActiveGame {
+			marker = "* "
+		}
+		fmt.Printf("%-2s %-24s %s\n", marker, g.Slug, g.Name)
+	}
+	if creds.ActiveGame == "" {
+		fmt.Println("\nNo active game. Run `asobi use <slug>` to select one.")
+	}
+}
+
+func cmdUse() {
+	if len(os.Args) < 3 {
+		fatal("usage: asobi use <slug>")
+	}
+	slug := os.Args[2]
+	creds := mustLoadCreds()
+	games, err := auth.ListGames(creds)
+	if err != nil {
+		fatal("use: %v", err)
+	}
+	found := false
+	for _, g := range games {
+		if g.Slug == slug {
+			found = true
+			break
+		}
+	}
+	if !found {
+		fatal("unknown game %q. Run `asobi games` to see your games.", slug)
+	}
+	creds.ActiveGame = slug
+	if err := auth.SaveCredentials(creds); err != nil {
+		fatal("save credentials: %v", err)
+	}
+	fmt.Printf("Active game set to %s\n", slug)
+}
+
+// --- Init ---
+
+func cmdInit() {
+	dir := "."
+	if len(os.Args) >= 3 && !strings.HasPrefix(os.Args[2], "--") {
+		dir = os.Args[2]
+	}
+	if dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fatal("create %s: %v", dir, err)
+		}
+	}
+
+	created, err := scaffold.Init(dir)
+	if err != nil {
+		fatal("init: %v", err)
+	}
+
+	fmt.Printf("Scaffolded a starter Asobi game in %s\n", dir)
+	for _, f := range created {
+		fmt.Printf("  created %s\n", f)
+	}
+	fmt.Println("\nNext steps:")
+	fmt.Println("  1. asobi login")
+	fmt.Println("  2. asobi use <game>")
+	fmt.Printf("  3. asobi deploy <env> %s\n", filepath.Join(dir, "lua"))
+	fmt.Println("  4. Connect a client - Defold quickstart: https://github.com/widgrensit/asobi-defold")
+}
+
+// --- Game resolution helpers ---
+
+// extractFlag pulls a "--name value" pair out of args, returning the value
+// (empty if absent) and the remaining positional/other args.
+func extractFlag(args []string, name string) (string, []string) {
+	var val string
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == name {
+			if i+1 < len(args) {
+				val = args[i+1]
+				i++
+			}
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	return val, rest
+}
+
+// resolveGame determines the effective game for an env operation:
+// explicit --game, then the persisted active game, then (interactively) a
+// picker or auto-selection, else a clear error.
+func resolveGame(explicit string, creds *auth.Credentials) string {
+	if explicit != "" {
+		return explicit
+	}
+	if creds.ActiveGame != "" {
+		return creds.ActiveGame
+	}
+	games, err := auth.ListGames(creds)
+	if err != nil {
+		fatal("No game selected. Run `asobi games` then `asobi use <slug>`, or pass --game <slug>.\n(could not list games: %v)", err)
+	}
+	switch {
+	case len(games) == 1:
+		return games[0].Slug
+	case len(games) >= 2 && stdinIsTTY():
+		return pickGame(games)
+	default:
+		fatal("No game selected. Run `asobi games` then `asobi use <slug>`, or pass --game <slug>.")
+	}
+	return ""
+}
+
+func stdinIsTTY() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return stat.Mode()&os.ModeCharDevice != 0
+}
+
+func pickGame(games []auth.Game) string {
+	fmt.Fprintln(os.Stderr, "Select a game:")
+	for i, g := range games {
+		fmt.Fprintf(os.Stderr, "  %d) %s  %s\n", i+1, g.Slug, g.Name)
+	}
+	fmt.Fprintf(os.Stderr, "Select a game [1-%d]: ", len(games))
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	choice, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil || choice < 1 || choice > len(games) {
+		fatal("invalid selection %q", strings.TrimSpace(line))
+	}
+	return games[choice-1].Slug
+}
+
+func gameLabel(slug string) string {
+	if slug == "" {
+		return "none - run asobi use <slug>"
+	}
+	return slug
+}
+
 func mustLoadCreds() *auth.Credentials {
 	creds, err := auth.LoadCredentials()
-	if err != nil {
+	if err != nil || creds == nil || creds.AccessToken == "" {
 		fatal("not logged in. Run: asobi login")
 	}
 	return creds

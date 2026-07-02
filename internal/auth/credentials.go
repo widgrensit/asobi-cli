@@ -22,6 +22,9 @@ type Credentials struct {
 	// DeviceSecret is the server-issued secret that binds the refresh token
 	// to this CLI install. Presented on refresh; never sent anywhere else.
 	DeviceSecret string `json:"device_secret"`
+	// ActiveGame is the slug of the game selected via `asobi use <slug>`.
+	// The effective game for env operations resolves from --game, then this.
+	ActiveGame string `json:"active_game"`
 }
 
 func credentialsPath() string {

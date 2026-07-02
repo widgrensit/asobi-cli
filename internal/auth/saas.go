@@ -238,9 +238,9 @@ func ListEnvs(creds *Credentials, ephemeralOnly bool) ([]Environment, error) {
 	return result.Environments, nil
 }
 
-// CreateEnv creates a named environment with a given size.
-func CreateEnv(creds *Credentials, name, size string) (map[string]interface{}, error) {
-	body, _ := json.Marshal(map[string]string{"name": name, "size": size})
+// CreateEnv creates a named environment for a game with a given size.
+func CreateEnv(creds *Credentials, game, name, size string) (map[string]interface{}, error) {
+	body, _ := json.Marshal(map[string]string{"game": game, "name": name, "size": size})
 	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func CreateEnv(creds *Credentials, name, size string) (map[string]interface{}, e
 		}
 		creds.AccessToken = refreshed
 		_ = SaveCredentials(creds)
-		return CreateEnv(creds, name, size)
+		return CreateEnv(creds, game, name, size)
 	}
 	var result map[string]interface{}
 	_ = json.Unmarshal(data, &result)
@@ -270,9 +270,9 @@ func CreateEnv(creds *Credentials, name, size string) (map[string]interface{}, e
 	return result, nil
 }
 
-// DeployBundle uploads a zip bundle to a named environment.
-func DeployBundle(creds *Credentials, name string, bundle []byte) (map[string]interface{}, error) {
-	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/deploy", bytes.NewReader(bundle))
+// DeployBundle uploads a zip bundle to a named environment within a game.
+func DeployBundle(creds *Credentials, game, name string, bundle []byte) (map[string]interface{}, error) {
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/deploy"+gameQuery(game), bytes.NewReader(bundle))
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +291,7 @@ func DeployBundle(creds *Credentials, name string, bundle []byte) (map[string]in
 		}
 		creds.AccessToken = refreshed
 		_ = SaveCredentials(creds)
-		return DeployBundle(creds, name, bundle)
+		return DeployBundle(creds, game, name, bundle)
 	}
 	var result map[string]interface{}
 	_ = json.Unmarshal(data, &result)
@@ -301,9 +301,9 @@ func DeployBundle(creds *Credentials, name string, bundle []byte) (map[string]in
 	return result, nil
 }
 
-// EnvAction performs stop/start on a named environment.
-func EnvAction(creds *Credentials, name, action string) error {
-	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/"+action, nil)
+// EnvAction performs stop/start on a named environment within a game.
+func EnvAction(creds *Credentials, game, name, action string) error {
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/"+action+gameQuery(game), nil)
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func EnvAction(creds *Credentials, name, action string) error {
 		}
 		creds.AccessToken = refreshed
 		_ = SaveCredentials(creds)
-		return EnvAction(creds, name, action)
+		return EnvAction(creds, game, name, action)
 	}
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
@@ -329,9 +329,39 @@ func EnvAction(creds *Credentials, name, action string) error {
 	return nil
 }
 
-// DeleteEnv deletes a named environment.
-func DeleteEnv(creds *Credentials, name string) error {
-	req, err := http.NewRequest("DELETE", creds.SaasURL+"/internal/cli/envs/"+name, nil)
+// ResizeEnv changes the size of a named environment within a game.
+func ResizeEnv(creds *Credentials, game, name, size string) error {
+	body, _ := json.Marshal(map[string]string{"size": size})
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/resize"+gameQuery(game), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return ResizeEnv(creds, game, name, size)
+	}
+	if resp.StatusCode >= 400 {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("resize failed (%d): %s", resp.StatusCode, data)
+	}
+	return nil
+}
+
+// DeleteEnv deletes a named environment within a game.
+func DeleteEnv(creds *Credentials, game, name string) error {
+	req, err := http.NewRequest("DELETE", creds.SaasURL+"/internal/cli/envs/"+name+gameQuery(game), nil)
 	if err != nil {
 		return err
 	}
@@ -348,7 +378,7 @@ func DeleteEnv(creds *Credentials, name string) error {
 		}
 		creds.AccessToken = refreshed
 		_ = SaveCredentials(creds)
-		return DeleteEnv(creds, name)
+		return DeleteEnv(creds, game, name)
 	}
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
@@ -357,9 +387,9 @@ func DeleteEnv(creds *Credentials, name string) error {
 	return nil
 }
 
-// ListEnvs2 returns environments using the new flat model.
-func ListEnvs2(creds *Credentials) ([]map[string]interface{}, error) {
-	req, err := http.NewRequest("GET", creds.SaasURL+"/internal/cli/envs", nil)
+// ListEnvs2 returns environments for a game using the new flat model.
+func ListEnvs2(creds *Credentials, game string) ([]map[string]interface{}, error) {
+	req, err := http.NewRequest("GET", creds.SaasURL+"/internal/cli/envs"+gameQuery(game), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +407,7 @@ func ListEnvs2(creds *Credentials) ([]map[string]interface{}, error) {
 		}
 		creds.AccessToken = refreshed
 		_ = SaveCredentials(creds)
-		return ListEnvs2(creds)
+		return ListEnvs2(creds, game)
 	}
 	var result struct {
 		Environments []map[string]interface{} `json:"environments"`
