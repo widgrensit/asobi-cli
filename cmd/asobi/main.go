@@ -20,6 +20,12 @@ import (
 
 const defaultSaasURL = "https://console.asobi.dev"
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -61,6 +67,8 @@ func main() {
 		cmdHealth()
 	case "config":
 		cmdConfig()
+	case "version", "--version", "-v":
+		cmdVersion()
 	case "help", "--help", "-h":
 		usage()
 	default:
@@ -90,6 +98,7 @@ Usage:
   asobi health                 Check engine health
   asobi config set <k> <v>     Set config (url, api_key, saas_url)
   asobi config show            Show current config
+  asobi version                Show version, commit, and build date
   asobi help                   Show this help
 
 Game selection:
@@ -99,6 +108,14 @@ Game selection:
 Login options:
   --saas-url <url>           SaaS URL (default: ` + defaultSaasURL + `)
   --token-name <name>        Name for this CLI session (default: hostname)`)
+}
+
+// --- Version ---
+
+func cmdVersion() {
+	fmt.Printf("asobi %s\n", version)
+	fmt.Printf("  commit: %s\n", commit)
+	fmt.Printf("  built:  %s\n", date)
 }
 
 // --- Login/Logout/Whoami ---
