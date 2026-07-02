@@ -94,7 +94,7 @@ Usage:
   asobi resize <name> --size <xs|s|m|l> [--game <slug>]  Resize an environment
   asobi delete <name> [--game <slug>]          Delete an environment
   asobi envs [--game <slug>]   List your environments
-  asobi health                 Check engine health
+  asobi health [env] [--game <slug>]   Check engine health (of an environment)
   asobi config set <k> <v>     Set config (url, api_key, saas_url)
   asobi config show            Show current config
   asobi version                Show version, commit, and build date
@@ -263,29 +263,91 @@ func resolveDeployCredentials() (engineURL, apiKey string) {
 
 func cmdHealth() {
 	creds, _ := auth.LoadCredentials()
-	var url string
-	if creds != nil && creds.EngineURL != "" {
-		url = creds.EngineURL
-	} else {
-		cfg, err := config.Load()
-		if err != nil {
-			fatal("load config: %v", err)
-		}
-		url = cfg.URL
-	}
+	url := resolveHealthURL(creds, os.Args[2:])
 
 	c := client.New(&config.Config{URL: url})
 	result, err := c.Health()
 	if err != nil {
-		fatal("health check failed: %v", err)
+		fatal("health check failed for %s: %v", url, err)
 	}
 
 	status, _ := result["status"].(string)
-	if status == "ok" {
+	if isHealthy(status) {
 		fmt.Printf("Engine at %s is healthy.\n", url)
 	} else {
 		fmt.Printf("Engine at %s returned: %v\n", url, result)
 	}
+}
+
+func isHealthy(status string) bool {
+	return status == "ok" || status == "healthy"
+}
+
+// resolveHealthURL picks which engine to check:
+//  1. an environment bound at login (creds.EngineURL),
+//  2. otherwise the active game's environment (named, or the only one),
+//  3. otherwise the configured URL (localhost default, for self-hosting).
+func resolveHealthURL(creds *auth.Credentials, args []string) string {
+	if creds != nil && creds.EngineURL != "" {
+		return creds.EngineURL
+	}
+	gameFlag, rest := extractFlag(args, "--game")
+	if creds != nil && (creds.ActiveGame != "" || gameFlag != "") {
+		return resolveEnvEndpoint(creds, resolveGame(gameFlag, creds), firstArg(rest))
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		fatal("load config: %v", err)
+	}
+	return cfg.URL
+}
+
+func resolveEnvEndpoint(creds *auth.Credentials, game, envName string) string {
+	envs, err := auth.ListEnvs2(creds, game)
+	if err != nil {
+		fatal("resolve environment for %s: %v", game, err)
+	}
+	env, err := selectEnv(envs, envName)
+	if err != nil {
+		fatal("%v (run `asobi envs` to list, or pass `asobi health <env>`)", err)
+	}
+	endpoint, _ := env["endpoint_url"].(string)
+	if endpoint == "" {
+		name, _ := env["name"].(string)
+		status, _ := env["provisioning_status"].(string)
+		fatal("environment %s has no endpoint yet (status: %s)", name, status)
+	}
+	return endpoint
+}
+
+// selectEnv resolves one environment from a game's list: by name when given,
+// otherwise the sole environment. It is ambiguous with several and no name.
+func selectEnv(envs []map[string]interface{}, envName string) (map[string]interface{}, error) {
+	if len(envs) == 0 {
+		return nil, fmt.Errorf("no environments for this game")
+	}
+	if envName != "" {
+		for _, e := range envs {
+			if name, _ := e["name"].(string); name == envName {
+				return e, nil
+			}
+		}
+		return nil, fmt.Errorf("no environment named %q", envName)
+	}
+	if len(envs) == 1 {
+		return envs[0], nil
+	}
+	return nil, fmt.Errorf("multiple environments - specify one")
+}
+
+// firstArg returns the first non-flag argument, or "".
+func firstArg(args []string) string {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "--") {
+			return a
+		}
+	}
+	return ""
 }
 
 // --- Config ---
