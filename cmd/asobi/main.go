@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -674,10 +673,16 @@ func cmdInit() {
 		fmt.Printf("  created %s\n", f)
 	}
 	fmt.Println("\nNext steps:")
-	fmt.Println("  1. asobi login")
-	fmt.Println("  2. asobi use <game>")
-	fmt.Printf("  3. asobi deploy <env> %s\n", filepath.Join(dir, "lua"))
-	fmt.Println("  4. Connect a client - Defold quickstart: https://github.com/widgrensit/asobi-defold")
+	n := 1
+	step := func(s string) { fmt.Printf("  %d. %s\n", n, s); n++ }
+	if dir != "." {
+		step("cd " + dir)
+	}
+	step("asobi login")
+	step("asobi use <game>       (list yours: asobi games)")
+	step("asobi create <env>     (e.g. asobi create prod)")
+	step("asobi deploy <env> lua")
+	step("Connect a client - Defold quickstart: https://github.com/widgrensit/asobi-defold")
 }
 
 // --- Game resolution helpers ---
