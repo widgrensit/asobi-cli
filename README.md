@@ -49,19 +49,49 @@ asobi deploy prod game/
 |---|---|
 | `asobi login` | Authenticate via browser (ECDH device-code flow) |
 | `asobi logout` | Clear stored credentials |
-| `asobi whoami` | Show current session info |
-| `asobi create <name> [--size xs\|s\|m\|l]` | Create an environment |
-| `asobi deploy <env-name> [dir]` | Deploy Lua scripts to an environment (`dir` defaults to `.`) |
+| `asobi whoami` | Show current session info (including the active game) |
+| `asobi init [dir]` | Scaffold a minimal working starter Lua game |
+| `asobi games` | List your tenant's games (marks the active one) |
+| `asobi use <slug>` | Set the active game (persisted in `~/.asobi`) |
+| `asobi create <name> [--size xs\|s\|m\|l] [--game <slug>]` | Create an environment |
+| `asobi deploy <env-name> [dir] [--game <slug>]` | Deploy Lua scripts to an environment (`dir` defaults to `.`) |
 | `asobi deploy --ephemeral [--name N] [--json]` | Create a fresh ephemeral env (1h TTL) and return env_id + api_key |
-| `asobi stop <name>` | Stop a running environment |
-| `asobi start <name>` | Start a stopped environment |
-| `asobi delete <name>` | Delete an environment |
+| `asobi stop <name> [--game <slug>]` | Stop a running environment |
+| `asobi start <name> [--game <slug>]` | Start a stopped environment |
+| `asobi resize <name> --size <xs\|s\|m\|l> [--game <slug>]` | Resize an environment |
+| `asobi delete <name> [--game <slug>]` | Delete an environment |
 | `asobi destroy <env_id>` | Delete by env_id and revoke its keys (idempotent; used by CI cleanup) |
-| `asobi envs` | List your environments |
+| `asobi envs [--game <slug>]` | List your environments |
 | `asobi env list [--ephemeral] [--json]` | Structured environment list for scripting |
 | `asobi health` | Check engine health |
 | `asobi config set <k> <v>` | Set manual config (`url`, `api_key`, `saas_url`) |
 | `asobi config show` | Show current config |
+
+## Selecting a game
+
+A CLI token is tenant-scoped and every environment belongs to a game, so env
+operations need a game. The effective game resolves in this order:
+
+1. an explicit `--game <slug>` flag
+2. the active game set with `asobi use <slug>` (stored as `active_game` in `~/.asobi/credentials.json`)
+3. if neither is set: with a single game it is auto-selected; with several games and an interactive terminal the CLI prompts; otherwise it errors.
+
+```bash
+asobi games            # list games, active one marked with *
+asobi use arena        # set the active game
+asobi create prod      # uses the active game
+asobi deploy prod lua --game ctf   # override for one command
+```
+
+## Starting a new game
+
+```bash
+asobi init mygame      # scaffold lua/match.lua + README.md
+cd mygame
+asobi login
+asobi use <game>
+asobi deploy prod lua
+```
 
 ## Ephemeral deploys (CI)
 
