@@ -89,7 +89,7 @@ cancelled job), the server-side reaper deletes the env automatically within
 asobi login [--saas-url <url>] [--token-name <name>]
 ```
 
-- `--saas-url` — Dashboard URL (default: `https://app.asobi.dev`). Self-hosters point this at their own dashboard.
+- `--saas-url` — Dashboard URL (default: `https://console.asobi.dev`). Self-hosters point this at their own dashboard.
 - `--token-name` — Name for this CLI session (default: hostname). Appears in the dashboard for identification.
 
 ## How login works

@@ -14,7 +14,7 @@ import (
 	"github.com/widgrensit/asobi-cli/internal/deploy"
 )
 
-const defaultSaasURL = "https://saas.asobi.dev"
+const defaultSaasURL = "https://console.asobi.dev"
 
 func main() {
 	if len(os.Args) < 2 {
