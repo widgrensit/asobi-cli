@@ -40,6 +40,16 @@ func TestInitCreatesWorkingGame(t *testing.T) {
 			t.Fatalf("match.lua missing %q", cb)
 		}
 	}
+
+	readme, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	for _, step := range []string{"asobi login", "asobi use", "asobi create", "asobi deploy"} {
+		if !strings.Contains(string(readme), step) {
+			t.Fatalf("README.md missing deploy step %q", step)
+		}
+	}
 }
 
 func TestInitRefusesToOverwrite(t *testing.T) {

@@ -65,9 +65,12 @@ are needed to start a match.
 
 ## Deploy
 
+Run these from this directory.
+
 ` + "```bash" + `
 asobi login
-asobi use <game>
+asobi use <game>       # list yours: asobi games
+asobi create <env>     # e.g. asobi create prod
 asobi deploy <env> lua
 ` + "```" + `
 
