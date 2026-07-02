@@ -4,6 +4,22 @@ Command-line tool for building and deploying multiplayer games on [Asobi](https:
 
 ## Install
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/widgrensit/asobi-cli/main/install.sh | sh
+```
+
+This downloads the latest release binary for your OS and architecture (Linux and
+macOS, amd64 and arm64), verifies its checksum, and installs it to
+`~/.local/bin` (override with `ASOBI_INSTALL_DIR`). Pin a version with
+`ASOBI_VERSION=v0.1.0`. Windows users download the zip from the
+[Releases](https://github.com/widgrensit/asobi-cli/releases) page.
+
+Verify the install:
+
+```bash
+asobi version
+```
+
 **From source (requires Go 1.26+):**
 
 ```bash
@@ -18,7 +34,7 @@ ln -s $(pwd)/bin/asobi ~/bin/asobi
 ### Hosted (asobi.dev)
 
 ```bash
-# Authenticate via browser — opens the dashboard, you pick tenant/game/env
+# Authenticate via browser - opens the dashboard, you pick tenant/game/env
 asobi login
 
 # Create an environment and deploy Lua scripts to it
@@ -109,7 +125,7 @@ trap "asobi destroy $ENV_ID" EXIT
 # ... run tests against the ephemeral env ...
 ```
 
-The 1-hour TTL is a safety net — if `trap` doesn't fire (runner timeout,
+The 1-hour TTL is a safety net - if `trap` doesn't fire (runner timeout,
 cancelled job), the server-side reaper deletes the env automatically within
 5 minutes of expiry. No manual cleanup needed.
 
@@ -119,8 +135,8 @@ cancelled job), the server-side reaper deletes the env automatically within
 asobi login [--saas-url <url>] [--token-name <name>]
 ```
 
-- `--saas-url` — Dashboard URL (default: `https://console.asobi.dev`). Self-hosters point this at their own dashboard.
-- `--token-name` — Name for this CLI session (default: hostname). Appears in the dashboard for identification.
+- `--saas-url` - Dashboard URL (default: `https://console.asobi.dev`). Self-hosters point this at their own dashboard.
+- `--token-name` - Name for this CLI session (default: hostname). Appears in the dashboard for identification.
 
 ## How login works
 
@@ -131,7 +147,7 @@ asobi login [--saas-url <url>] [--token-name <name>]
 3. On approval, the dashboard encrypts your CLI credentials (access token + refresh token) with AES-256-GCM using a shared secret derived from the ECDH key exchange.
 4. The CLI polls until approval, decrypts the payload locally, and stores the credentials.
 
-This design means the credentials never travel in plaintext over the polling channel — even a passive observer on the network between the CLI and the dashboard cannot read them.
+This design means the credentials never travel in plaintext over the polling channel - even a passive observer on the network between the CLI and the dashboard cannot read them.
 
 ### Credential storage
 
@@ -147,15 +163,15 @@ When credentials are present (from `asobi login`):
 2. If the access token has expired, the CLI auto-refreshes it from the refresh token (bound to the device fingerprint from login).
 3. The ephemeral key is used for the actual deploy call to the engine.
 
-This means a compromised credential file has limited blast radius — the access token can mint deploy keys but expires in 24 hours, and the refresh token is bound to the device it was issued on.
+This means a compromised credential file has limited blast radius - the access token can mint deploy keys but expires in 24 hours, and the refresh token is bound to the device it was issued on.
 
-When no credentials are present, the CLI falls back to the manual `api_key` from `asobi config set` — backwards compatible for self-hosted setups.
+When no credentials are present, the CLI falls back to the manual `api_key` from `asobi config set` - backwards compatible for self-hosted setups.
 
 ## Configuration
 
 | File | Purpose |
 |---|---|
-| `~/.asobi/config.json` | Manual config (engine URL, API key) — self-hosted fallback |
+| `~/.asobi/config.json` | Manual config (engine URL, API key) - self-hosted fallback |
 | `~/.asobi/credentials.json` | Login credentials (access/refresh tokens, tenant context) |
 
 Credentials take precedence over manual config when both exist.
@@ -168,7 +184,7 @@ Credentials take precedence over manual config when both exist.
 - Refresh tokens: 30-day lifetime, bound to device fingerprint
 - Ephemeral engine keys: 1-hour lifetime, tagged with `source=cli_deploy`
 - Default deploy scope: `[deploy]` only (least privilege)
-- No `--insecure` flag — TLS is always required for non-localhost URLs
+- No `--insecure` flag - TLS is always required for non-localhost URLs
 
 ## License
 
