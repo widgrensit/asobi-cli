@@ -238,27 +238,6 @@ func cmdDeploy() {
 	fmt.Printf("\nDeployed to %s (game: %s)! generation=%d sha256=%s\n", envName, game, int(gen), sha[:12]+"...")
 }
 
-func resolveDeployCredentials() (engineURL, apiKey string) {
-	creds, _ := auth.LoadCredentials()
-	if creds != nil && creds.AccessToken != "" {
-		fmt.Println("Minting ephemeral deploy key...")
-		key, err := auth.MintKey(creds)
-		if err != nil {
-			fatal("mint deploy key: %v\nTry: asobi login", err)
-		}
-		return creds.EngineURL, key
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		fatal("load config: %v", err)
-	}
-	if cfg.APIKey == "" {
-		fatal("not logged in and no API key configured.\n\nRun: asobi login\n  or: asobi config set api_key <key>")
-	}
-	return cfg.URL, cfg.APIKey
-}
-
 // --- Health ---
 
 func cmdHealth() {
@@ -434,39 +413,6 @@ func startSpinner() func() {
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
 	os.Exit(1)
-}
-
-// --- Ephemeral deploy ---
-
-func cmdDeployEphemeral(name string, jsonOut bool) {
-	creds, err := auth.LoadCredentials()
-	if err != nil || creds == nil || creds.AccessToken == "" {
-		fatal("not logged in. Run: asobi login")
-	}
-
-	if !jsonOut {
-		fmt.Println("Creating ephemeral environment (1h TTL)...")
-	}
-	resp, err := auth.EphemeralDeploy(creds, name)
-	if err != nil {
-		fatal("ephemeral-deploy: %v", err)
-	}
-
-	if jsonOut {
-		out, _ := json.Marshal(map[string]any{
-			"env_id":     resp.EnvID,
-			"api_key":    resp.RawKey,
-			"expires_in": resp.ExpiresIn,
-		})
-		fmt.Println(string(out))
-		return
-	}
-
-	fmt.Printf("\n🦝 Ephemeral environment created!\n")
-	fmt.Printf("  env_id:     %s\n", resp.EnvID)
-	fmt.Printf("  api_key:    %s\n", resp.RawKey)
-	fmt.Printf("  expires_in: %ds (~%dm)\n", resp.ExpiresIn, resp.ExpiresIn/60)
-	fmt.Printf("\nTo destroy explicitly: asobi destroy %s\n", resp.EnvID)
 }
 
 // --- Destroy ---

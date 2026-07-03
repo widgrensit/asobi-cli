@@ -9,20 +9,6 @@ import (
 	"time"
 )
 
-type mintKeyResponse struct {
-	RawKey    string `json:"raw_key"`
-	ExpiresIn int    `json:"expires_in"`
-	Error     string `json:"error,omitempty"`
-}
-
-// EphemeralDeploy creates a fresh ephemeral environment + API key with 1h TTL.
-type EphemeralDeployResponse struct {
-	EnvID     string `json:"env_id"`
-	RawKey    string `json:"raw_key"`
-	ExpiresIn int    `json:"expires_in"`
-	Error     string `json:"error,omitempty"`
-}
-
 // Environment is a single env returned by ListEnvs.
 type Environment struct {
 	ID          string `json:"id"`
@@ -50,46 +36,6 @@ type refreshResponse struct {
 }
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
-
-// MintKey calls the saas to create a short-lived engine API key.
-// Uses the CLI's access token as a bearer credential.
-func MintKey(creds *Credentials) (string, error) {
-	url := creds.SaasURL + "/internal/cli/mint-key"
-	req, err := http.NewRequest("POST", url, bytes.NewReader([]byte("{}")))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("POST /internal/cli/mint-key: %w", err)
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode == 401 {
-		refreshed, refreshErr := RefreshAccessToken(creds)
-		if refreshErr != nil {
-			return "", fmt.Errorf("access token expired and refresh failed: %w (original: %s)", refreshErr, data)
-		}
-		creds.AccessToken = refreshed
-		if saveErr := SaveCredentials(creds); saveErr != nil {
-			return "", fmt.Errorf("save refreshed credentials: %w", saveErr)
-		}
-		return MintKey(creds)
-	}
-
-	var result mintKeyResponse
-	if err := json.Unmarshal(data, &result); err != nil {
-		return "", fmt.Errorf("parse mint-key response: %w", err)
-	}
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("mint-key failed (%d): %s", resp.StatusCode, result.Error)
-	}
-	return result.RawKey, nil
-}
 
 // RefreshAccessToken exchanges a refresh token for a new access token.
 // The device secret issued at login must match the hash stored server-side.
@@ -123,43 +69,6 @@ func mustNewRequest(method, url string, body []byte) *http.Request {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	return req
-}
-
-// EphemeralDeploy creates a fresh ephemeral env + API key with 1h TTL.
-func EphemeralDeploy(creds *Credentials, name string) (*EphemeralDeployResponse, error) {
-	body, _ := json.Marshal(map[string]string{"name": name})
-	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/ephemeral-deploy", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("POST /internal/cli/ephemeral-deploy: %w", err)
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode == 401 {
-		refreshed, refreshErr := RefreshAccessToken(creds)
-		if refreshErr != nil {
-			return nil, fmt.Errorf("access token expired and refresh failed: %w", refreshErr)
-		}
-		creds.AccessToken = refreshed
-		_ = SaveCredentials(creds)
-		return EphemeralDeploy(creds, name)
-	}
-
-	var result EphemeralDeployResponse
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("ephemeral-deploy failed (%d): %s", resp.StatusCode, result.Error)
-	}
-	return &result, nil
 }
 
 // Destroy deletes an environment by ID. Idempotent.
