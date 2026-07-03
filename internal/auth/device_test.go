@@ -3,7 +3,6 @@ package auth
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -134,65 +133,5 @@ func TestLoginDenied(t *testing.T) {
 	want := "login denied by user"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
-	}
-}
-
-func TestMintKeyHappyPath(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/cli/mint-key", func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer test-access-token" {
-			w.WriteHeader(401)
-			fmt.Fprintf(w, `{"error":"invalid_token"}`)
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]any{
-			"raw_key":    "ak_test1234_deadbeef",
-			"expires_in": 3600,
-		})
-	})
-
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	creds := &Credentials{
-		AccessToken:       "test-access-token",
-		SaasURL:           server.URL,
-		DeviceFingerprint: "test-host",
-	}
-
-	key, err := MintKey(creds)
-	if err != nil {
-		t.Fatalf("MintKey: %v", err)
-	}
-	if key != "ak_test1234_deadbeef" {
-		t.Errorf("key = %q, want ak_test1234_deadbeef", key)
-	}
-}
-
-func TestMintKeyBadToken(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/cli/mint-key", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(401)
-		fmt.Fprintf(w, `{"error":"invalid_token"}`)
-	})
-	mux.HandleFunc("/internal/cli/refresh", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(401)
-		fmt.Fprintf(w, `{"error":"refresh_expired"}`)
-	})
-
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	creds := &Credentials{
-		AccessToken:       "bad-token",
-		RefreshToken:      "also-bad",
-		SaasURL:           server.URL,
-		DeviceFingerprint: "test-host",
-	}
-
-	_, err := MintKey(creds)
-	if err == nil {
-		t.Fatal("expected error for bad token")
 	}
 }

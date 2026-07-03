@@ -1,10 +1,7 @@
 package client
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -27,67 +24,9 @@ func (c *Client) Health() (map[string]any, error) {
 	return c.get("/health")
 }
 
-type DeployRequest struct {
-	Scripts []Script `json:"scripts"`
-}
-
 type Script struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
-}
-
-type DeployResponse struct {
-	Deployed int      `json:"deployed"`
-	Scripts  []string `json:"scripts"`
-	Error    string   `json:"error,omitempty"`
-	Message  string   `json:"message,omitempty"`
-}
-
-func (c *Client) Deploy(scripts []Script) (*DeployResponse, error) {
-	body, err := json.Marshal(DeployRequest{Scripts: scripts})
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", c.cfg.URL+"/internal/deploy", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.cfg.APIKey)
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if len(data) == 0 {
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return &DeployResponse{Deployed: len(scripts)}, nil
-		}
-		return nil, fmt.Errorf("deploy failed (%d): empty response", resp.StatusCode)
-	}
-
-	var result DeployResponse
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse response (%d): %s", resp.StatusCode, string(data))
-	}
-
-	if resp.StatusCode != 200 {
-		msg := result.Message
-		if msg == "" {
-			msg = result.Error
-		}
-		return nil, fmt.Errorf("deploy failed (%d): %s", resp.StatusCode, msg)
-	}
-
-	return &result, nil
 }
 
 func (c *Client) get(path string) (map[string]any, error) {
