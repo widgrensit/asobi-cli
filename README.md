@@ -4,15 +4,31 @@ Command-line tool for building and deploying multiplayer games on [Asobi](https:
 
 ## Install
 
+**Linux / macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/widgrensit/asobi-cli/main/install.sh | sh
 ```
 
-This downloads the latest release binary for your OS and architecture (Linux and
-macOS, amd64 and arm64), verifies its checksum, and installs it to
-`~/.local/bin` (override with `ASOBI_INSTALL_DIR`). Pin a version with
-`ASOBI_VERSION=v0.1.0`. Windows users download the zip from the
-[Releases](https://github.com/widgrensit/asobi-cli/releases) page.
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/widgrensit/asobi-cli/main/install.ps1 | iex
+```
+
+Or with a package manager:
+
+```powershell
+winget install widgrensit.asobi
+# or
+scoop bucket add asobi https://github.com/widgrensit/scoop-bucket
+scoop install asobi
+```
+
+The scripts download the latest release binary for your OS and architecture
+(amd64 and arm64), verify its checksum, and install it to `~/.local/bin` on
+Linux/macOS or `%LOCALAPPDATA%\asobi\bin` on Windows (override with
+`ASOBI_INSTALL_DIR`). Pin a version with `ASOBI_VERSION=v0.1.0`.
 
 Verify the install:
 

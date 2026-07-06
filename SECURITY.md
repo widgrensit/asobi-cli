@@ -41,7 +41,14 @@ Either of these channels work:
 
 ## Credential storage
 
-`asobi-cli` stores credentials at `~/.asobi/credentials.json` with mode
-`0600`, in a directory with mode `0700`. The CLI does not transmit
-credentials over unencrypted channels and uses ECDH+AES-GCM for the
-initial device-code login exchange.
+`asobi-cli` stores credentials at `~/.asobi/credentials.json`
+(`%USERPROFILE%\.asobi\credentials.json` on Windows). The CLI does not
+transmit credentials over unencrypted channels and uses ECDH+AES-GCM for
+the initial device-code login exchange.
+
+On Linux and macOS the file is written with mode `0600` in a `0700`
+directory, restricting it to the owning user. On Windows those modes only
+set the read-only attribute; the file is instead protected by the ACL it
+inherits from your user profile (owner, SYSTEM, and Administrators).
+Encrypting the credential file at rest with DPAPI is tracked as a
+hardening enhancement.
