@@ -47,3 +47,44 @@ release:
 
 changelog:
   use: github
+
+# Windows package managers. Both publish to separate repos, so they need a PAT
+# (repo-scoped GITHUB_TOKEN cannot push cross-repo). Until the tokens are set as
+# secrets, skip_upload keeps releases green - binaries still ship, only the
+# manifest push is skipped.
+scoops:
+  - name: asobi
+    repository:
+      owner: widgrensit
+      name: scoop-bucket
+      branch: main
+      token: '{{ index .Env "SCOOP_TOKEN" }}'
+    directory: bucket
+    homepage: "https://github.com/widgrensit/asobi"
+    description: "Command-line tool for building and deploying multiplayer games on Asobi."
+    license: Apache-2.0
+    skip_upload: '{{ if ne (index .Env "SCOOP_TOKEN") "" }}false{{ else }}true{{ end }}'
+
+winget:
+  - name: asobi
+    package_identifier: widgrensit.asobi
+    publisher: widgrensit
+    short_description: "Command-line tool for building and deploying multiplayer games on Asobi."
+    license: Apache-2.0
+    homepage: "https://github.com/widgrensit/asobi"
+    publisher_url: https://github.com/widgrensit
+    publisher_support_url: "https://github.com/widgrensit/asobi-cli/issues"
+    license_url: "https://github.com/widgrensit/asobi-cli/blob/main/LICENSE"
+    skip_upload: '{{ if ne (index .Env "WINGET_TOKEN") "" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: widgrensit
+      name: winget-pkgs
+      branch: "asobi-{{ .Version }}"
+      token: '{{ index .Env "WINGET_TOKEN" }}'
+      pull_request:
+        enabled: true
+        draft: false
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master

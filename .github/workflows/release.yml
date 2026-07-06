@@ -24,3 +24,5 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCOOP_TOKEN: ${{ secrets.SCOOP_TOKEN }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
