@@ -169,4 +169,8 @@ func TestFetchE2E(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "game.project")); err != nil {
 		t.Errorf("defold template missing game.project: %v", err)
 	}
+	// Self-contained: the template must bundle the server Lua so `asobi dev` runs.
+	if _, err := os.Stat(filepath.Join(dir, "lua", "match.lua")); err != nil {
+		t.Errorf("defold template missing bundled lua/match.lua: %v", err)
+	}
 }
