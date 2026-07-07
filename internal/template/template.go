@@ -17,9 +17,9 @@ import (
 	"time"
 )
 
-// Template is a demo repository pinned to an immutable commit. The demos have no
-// release tags yet, so Ref is a commit SHA; switch to tags once the demos cut
-// releases.
+// Template is a demo repository pinned to an immutable release tag. Bump Ref to
+// adopt a newer demo; the demos auto-cut tags via their release workflow on merge
+// to main, so a stable tag always exists to pin to.
 type Template struct {
 	Repo string
 	Ref  string
@@ -27,9 +27,9 @@ type Template struct {
 }
 
 var registry = map[string]Template{
-	"defold": {Repo: "asobi-defold-demo", Ref: "b0137d5ab4f6ac122f88ec7a76869ab057637f1a", Name: "Defold"},
-	"godot":  {Repo: "asobi-godot-demo", Ref: "24029f59e233b3030f0dcd3a459770aad3a77f58", Name: "Godot"},
-	"unity":  {Repo: "asobi-unity-demo", Ref: "a0ec8d229f57843c2eb5557696b5b7b5db270fac", Name: "Unity"},
+	"defold": {Repo: "asobi-defold-demo", Ref: "v0.1.0", Name: "Defold"},
+	"godot":  {Repo: "asobi-godot-demo", Ref: "v0.1.0", Name: "Godot"},
+	"unity":  {Repo: "asobi-unity-demo", Ref: "v0.1.0", Name: "Unity"},
 }
 
 const (
