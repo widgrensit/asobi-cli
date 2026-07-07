@@ -15,6 +15,7 @@ import (
 	"github.com/widgrensit/asobi-cli/internal/config"
 	"github.com/widgrensit/asobi-cli/internal/deploy"
 	"github.com/widgrensit/asobi-cli/internal/scaffold"
+	"github.com/widgrensit/asobi-cli/internal/template"
 )
 
 const defaultSaasURL = "https://console.asobi.dev"
@@ -85,6 +86,8 @@ Usage:
   asobi logout                 Clear stored credentials
   asobi whoami                 Show current credential info
   asobi init [dir]             Scaffold a starter Lua game
+  asobi init [dir] --template <engine>
+                              Scaffold a runnable demo (defold|godot|unity)
   asobi games                  List your tenant's games
   asobi use <slug>             Set the active game
   asobi create <name> [--size xs|s|m|l] [--game <slug>]  Create an environment
@@ -661,14 +664,44 @@ func cmdUse() {
 // --- Init ---
 
 func cmdInit() {
+	args := os.Args[2:]
+	engine, args := extractFlag(args, "--template")
+
 	dir := "."
-	if len(os.Args) >= 3 && !strings.HasPrefix(os.Args[2], "--") {
-		dir = os.Args[2]
+	for _, a := range args {
+		if !strings.HasPrefix(a, "--") {
+			dir = a
+			break
+		}
 	}
 	if dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			fatal("create %s: %v", dir, err)
 		}
+	}
+
+	if engine != "" {
+		t, ok := template.Get(engine)
+		if !ok {
+			fatal("unknown template %q; available: %s", engine, strings.Join(template.Engines(), ", "))
+		}
+		fmt.Printf("Fetching the %s template into %s ...\n", t.Name, dir)
+		created, err := template.Fetch(engine, dir)
+		if err != nil {
+			fatal("init: %v", err)
+		}
+		fmt.Printf("Scaffolded the %s game template in %s\n", t.Name, dir)
+		for _, f := range created {
+			fmt.Printf("  created %s\n", f)
+		}
+		fmt.Println("\nNext steps:")
+		n := 1
+		step := func(s string) { fmt.Printf("  %d. %s\n", n, s); n++ }
+		if dir != "." {
+			step("cd " + dir)
+		}
+		step("Open README.md - it walks through starting the backend and opening the project in " + t.Name + ".")
+		return
 	}
 
 	created, err := scaffold.Init(dir)
