@@ -14,6 +14,7 @@ import (
 	"github.com/widgrensit/asobi-cli/internal/client"
 	"github.com/widgrensit/asobi-cli/internal/config"
 	"github.com/widgrensit/asobi-cli/internal/deploy"
+	"github.com/widgrensit/asobi-cli/internal/dev"
 	"github.com/widgrensit/asobi-cli/internal/scaffold"
 	"github.com/widgrensit/asobi-cli/internal/template"
 )
@@ -59,6 +60,8 @@ func main() {
 		cmdEnvs()
 	case "init":
 		cmdInit()
+	case "dev":
+		cmdDev()
 	case "destroy":
 		cmdDestroy()
 	case "env":
@@ -88,6 +91,8 @@ Usage:
   asobi init [dir]             Scaffold a starter Lua game
   asobi init [dir] --template <engine>
                               Scaffold a runnable demo (defold|godot|unity)
+  asobi dev [--port N] [--dir <lua>]
+                              Run a local backend for your Lua game (Docker)
   asobi games                  List your tenant's games
   asobi use <slug>             Set the active game
   asobi create <name> [--size xs|s|m|l] [--game <slug>]  Create an environment
@@ -724,6 +729,29 @@ func cmdInit() {
 	step("asobi create <env>     (e.g. asobi create prod)")
 	step("asobi deploy <env> lua")
 	step("Connect a client - Defold quickstart: https://github.com/widgrensit/asobi-defold")
+}
+
+func cmdDev() {
+	args := os.Args[2:]
+	portStr, args := extractFlag(args, "--port")
+	luaDir, _ := extractFlag(args, "--dir")
+
+	port := 8084
+	if portStr != "" {
+		n, err := strconv.Atoi(portStr)
+		if err != nil || n < 1 || n > 65535 {
+			fatal("--port must be a number 1-65535, got %q", portStr)
+		}
+		port = n
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fatal("dev: %v", err)
+	}
+	if err := dev.Run(dev.Options{Root: root, LuaOverride: luaDir, Port: port}); err != nil {
+		fatal("%v", err)
+	}
 }
 
 // --- Game resolution helpers ---
