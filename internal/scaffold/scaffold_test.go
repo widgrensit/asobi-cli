@@ -50,6 +50,11 @@ func TestInitCreatesWorkingGame(t *testing.T) {
 			t.Fatalf("README.md missing deploy step %q", step)
 		}
 	}
+	for _, hint := range []string{"asobi dev", "config.lua", "--template backend"} {
+		if !strings.Contains(string(readme), hint) {
+			t.Fatalf("README.md missing %q", hint)
+		}
+	}
 }
 
 func TestInitRefusesToOverwrite(t *testing.T) {
