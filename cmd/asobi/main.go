@@ -89,8 +89,9 @@ Usage:
   asobi logout                 Clear stored credentials
   asobi whoami                 Show current credential info
   asobi init [dir]             Scaffold a starter Lua game
-  asobi init [dir] --template <engine>
-                              Scaffold a runnable demo (defold|godot|unity)
+  asobi init [dir] --template <name>
+                              Scaffold a runnable project:
+                              defold|godot|unity (client demo) or backend (server only)
   asobi dev [--port N] [--dir <lua>]
                               Run a local backend for your Lua game (Docker)
   asobi games                  List your tenant's games
@@ -688,7 +689,7 @@ func cmdInit() {
 	if engine != "" {
 		t, ok := template.Get(engine)
 		if !ok {
-			fatal("unknown template %q; available: %s", engine, strings.Join(template.Engines(), ", "))
+			fatal("unknown template %q; available: %s", engine, strings.Join(template.Names(), ", "))
 		}
 		fmt.Printf("Fetching the %s template into %s ...\n", t.Name, dir)
 		created, err := template.Fetch(engine, dir)
@@ -705,7 +706,12 @@ func cmdInit() {
 		if dir != "." {
 			step("cd " + dir)
 		}
-		step("Open README.md - it walks through starting the backend and opening the project in " + t.Name + ".")
+		if engine == "backend" {
+			step("docker compose up -d   (asobi_lua image + Postgres on :8084)")
+			step("Open README.md - it covers the managed (asobi deploy) vs local (compose) paths and adding modes in lua/config.lua.")
+		} else {
+			step("Open README.md - it walks through starting the backend and opening the project in " + t.Name + ".")
+		}
 		return
 	}
 

@@ -51,11 +51,11 @@ func makeTarGz(t *testing.T, entries []entry) []byte {
 	return buf.Bytes()
 }
 
-func TestEnginesKnown(t *testing.T) {
-	got := Engines()
-	want := []string{"defold", "godot", "unity"}
+func TestNamesKnown(t *testing.T) {
+	got := Names()
+	want := []string{"backend", "defold", "godot", "unity"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Engines() = %v, want %v", got, want)
+		t.Fatalf("Names() = %v, want %v", got, want)
 	}
 	for _, e := range want {
 		if _, ok := Get(e); !ok {

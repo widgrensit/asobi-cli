@@ -1,7 +1,8 @@
-// Package template scaffolds a runnable client+backend game project by fetching
-// one of the asobi demo repositories at a pinned commit. The demos are the single
-// source of truth (no parallel templates to drift); each carries its own README
-// documenting how to run the backend and open the project in its engine.
+// Package template scaffolds a runnable game project by fetching one of the asobi
+// demo repositories at a pinned commit: an engine template (client + backend) or
+// the backend template (server-Lua backend only). The repos are the single source
+// of truth (no parallel templates to drift); each carries its own README
+// documenting how to run the backend and, for engine templates, open the project.
 package template
 
 import (
@@ -27,9 +28,10 @@ type Template struct {
 }
 
 var registry = map[string]Template{
-	"defold": {Repo: "asobi-defold-demo", Ref: "v0.2.0", Name: "Defold"},
-	"godot":  {Repo: "asobi-godot-demo", Ref: "v0.2.0", Name: "Godot"},
-	"unity":  {Repo: "asobi-unity-demo", Ref: "v0.2.0", Name: "Unity"},
+	"defold":  {Repo: "asobi-defold-demo", Ref: "v0.2.0", Name: "Defold"},
+	"godot":   {Repo: "asobi-godot-demo", Ref: "v0.2.0", Name: "Godot"},
+	"unity":   {Repo: "asobi-unity-demo", Ref: "v0.2.0", Name: "Unity"},
+	"backend": {Repo: "sdk_demo_backend", Ref: "v0.1.0", Name: "Backend"},
 }
 
 const (
@@ -37,8 +39,9 @@ const (
 	maxBytes = 500 << 20 // 500 MiB, generous for a Unity demo
 )
 
-// Engines returns the known template engine keys, sorted.
-func Engines() []string {
+// Names returns the known template names, sorted (e.g. defold, godot, unity,
+// backend).
+func Names() []string {
 	keys := make([]string, 0, len(registry))
 	for k := range registry {
 		keys = append(keys, k)
@@ -58,7 +61,7 @@ func Get(engine string) (Template, bool) {
 func Fetch(engine, dir string) ([]string, error) {
 	t, ok := registry[engine]
 	if !ok {
-		return nil, fmt.Errorf("unknown template %q; available: %s", engine, strings.Join(Engines(), ", "))
+		return nil, fmt.Errorf("unknown template %q; available: %s", engine, strings.Join(Names(), ", "))
 	}
 	if err := requireEmptyDir(dir); err != nil {
 		return nil, err
