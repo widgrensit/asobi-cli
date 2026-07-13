@@ -18,11 +18,40 @@ import (
 	"time"
 )
 
-// maxDownload bounds a release asset or checksums download. Asset archives are
-// a few MB; this is a generous ceiling against a hostile oversized response.
-const maxDownload = 64 << 20
+// maxDownload bounds a release asset or checksums download, and the size of the
+// binary extracted from it. Asset archives are a few MB; this is a generous
+// ceiling against a hostile oversized response. Var, not const, so tests can
+// exercise the overflow guards cheaply.
+var maxDownload int64 = 64 << 20
 
-var downloadClient = &http.Client{Timeout: 2 * time.Minute}
+// downloadClient refuses to follow a redirect to a non-HTTPS URL, so a
+// downgrade injected on-path can never move the download onto plaintext.
+var downloadClient = &http.Client{
+	Timeout: 2 * time.Minute,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		if req.URL.Scheme != "https" {
+			return fmt.Errorf("refusing redirect to non-HTTPS URL %s", req.URL)
+		}
+		return nil
+	},
+}
+
+// readCapped reads r fully but fails closed if it exceeds maxDownload, rather
+// than silently truncating (the checksum covers the archive, not the extracted
+// binary, so a truncated binary would install unnoticed).
+func readCapped(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxDownload+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxDownload {
+		return nil, fmt.Errorf("extracted asobi binary exceeds %d byte limit", maxDownload)
+	}
+	return data, nil
+}
 
 // SelfUpgrade downloads the latest release for this platform, verifies it
 // against the release checksums, and atomically replaces the running binary.
@@ -99,7 +128,7 @@ func download(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > maxDownload {
+	if int64(len(data)) > maxDownload {
 		return nil, fmt.Errorf("%s exceeds %d byte limit", url, maxDownload)
 	}
 	return data, nil
@@ -151,7 +180,7 @@ func extractTarGz(archive []byte) ([]byte, error) {
 			return nil, fmt.Errorf("read archive: %w", err)
 		}
 		if isBinaryEntry(hdr.Name) {
-			return io.ReadAll(io.LimitReader(tr, maxDownload))
+			return readCapped(tr)
 		}
 	}
 	return nil, fmt.Errorf("asobi binary not found in archive")
@@ -169,7 +198,7 @@ func extractZip(archive []byte) ([]byte, error) {
 				return nil, err
 			}
 			defer rc.Close()
-			return io.ReadAll(io.LimitReader(rc, maxDownload))
+			return readCapped(rc)
 		}
 	}
 	return nil, fmt.Errorf("asobi binary not found in archive")
@@ -211,7 +240,9 @@ func replaceExecutable(exe string, bin []byte) error {
 			return fmt.Errorf("move current binary aside: %w", err)
 		}
 		if err := os.Rename(tmpName, exe); err != nil {
-			_ = os.Rename(old, exe)
+			if rbErr := os.Rename(old, exe); rbErr != nil {
+				return fmt.Errorf("install new binary: %w; could not restore original - it is at %s, rename it back to %s manually", err, old, exe)
+			}
 			return fmt.Errorf("install new binary: %w", err)
 		}
 		return nil

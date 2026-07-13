@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,14 @@ const installCmd = "curl -fsSL https://raw.githubusercontent.com/widgrensit/asob
 // checkInterval is how long a cached version-check result is trusted before we
 // hit the network again.
 const checkInterval = 24 * time.Hour
+
+// versionRe bounds the shape of a release tag before it is trusted in a notice
+// or interpolated into a download URL.
+var versionRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.\-]+)?$`)
+
+func validVersion(s string) bool {
+	return versionRe.MatchString(strings.TrimSpace(s))
+}
 
 // Overridable in tests.
 var (
@@ -81,7 +90,7 @@ func cachePath() string {
 // cachedOrFetch returns the latest known release tag, using the cache when it
 // is fresh and otherwise refreshing it from the releases API.
 func cachedOrFetch() (string, error) {
-	if c, ok := readCache(); ok && time.Since(c.CheckedAt) < checkInterval {
+	if c, ok := readCache(); ok && time.Since(c.CheckedAt) < checkInterval && validVersion(c.Latest) {
 		return c.Latest, nil
 	}
 	latest, err := LatestReleaseTag(context.Background())
@@ -138,8 +147,8 @@ func LatestReleaseTag(ctx context.Context) (string, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rel); err != nil {
 		return "", err
 	}
-	if rel.TagName == "" {
-		return "", fmt.Errorf("no tag_name in latest release")
+	if !validVersion(rel.TagName) {
+		return "", fmt.Errorf("invalid release tag %q", rel.TagName)
 	}
 	return rel.TagName, nil
 }

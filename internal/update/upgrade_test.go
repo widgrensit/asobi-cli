@@ -187,3 +187,29 @@ func TestDownloadVerifyExtractPipeline(t *testing.T) {
 		t.Error("extracted binary mismatch")
 	}
 }
+
+func TestExtractBinaryRejectsOversized(t *testing.T) {
+	old := maxDownload
+	maxDownload = 8
+	defer func() { maxDownload = old }()
+
+	big := bytes.Repeat([]byte("A"), 100)
+	if _, err := extractBinary(tarGz(t, "asobi", big), "asobi_linux_amd64.tar.gz"); err == nil {
+		t.Error("oversized extracted binary must be rejected, not silently truncated")
+	}
+}
+
+func TestDownloadRefusesHTTPDowngrade(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("payload"))
+	}))
+	defer target.Close()
+	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer redir.Close()
+
+	if _, err := download(redir.URL + "/asset"); err == nil {
+		t.Error("redirect to a non-HTTPS URL must be refused")
+	}
+}

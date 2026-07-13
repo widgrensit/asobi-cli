@@ -115,3 +115,30 @@ func TestNotifySkips(t *testing.T) {
 		})
 	}
 }
+
+func TestValidVersion(t *testing.T) {
+	for _, ok := range []string{"v0.2.0", "0.2.0", "v1.2.3-rc1", "v0.2.0+build.1"} {
+		if !validVersion(ok) {
+			t.Errorf("%q should be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", "latest", "v1.2", "1.2.3.4", "v1.2.x", "0.2.0; rm -rf /", "../../etc"} {
+		if validVersion(bad) {
+			t.Errorf("%q should be invalid", bad)
+		}
+	}
+}
+
+func TestLatestReleaseTagRejectsGarbage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"tag_name":"not-a-version"}`))
+	}))
+	defer srv.Close()
+	old := apiBaseURL
+	apiBaseURL = srv.URL
+	defer func() { apiBaseURL = old }()
+
+	if _, err := LatestReleaseTag(context.Background()); err == nil {
+		t.Error("non-semver tag_name must be rejected")
+	}
+}
