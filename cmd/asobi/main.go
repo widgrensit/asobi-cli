@@ -17,6 +17,7 @@ import (
 	"github.com/widgrensit/asobi-cli/internal/dev"
 	"github.com/widgrensit/asobi-cli/internal/scaffold"
 	"github.com/widgrensit/asobi-cli/internal/template"
+	"github.com/widgrensit/asobi-cli/internal/update"
 )
 
 const defaultSaasURL = "https://console.asobi.dev"
@@ -70,6 +71,8 @@ func main() {
 		cmdHealth()
 	case "config":
 		cmdConfig()
+	case "upgrade":
+		cmdUpgrade()
 	case "version", "--version", "-v":
 		cmdVersion()
 	case "help", "--help", "-h":
@@ -79,6 +82,8 @@ func main() {
 		usage()
 		os.Exit(1)
 	}
+
+	update.Notify(version, os.Args[1], os.Stderr)
 }
 
 func usage() {
@@ -106,6 +111,7 @@ Usage:
   asobi health [env] [--game <slug>]   Check engine health (of an environment)
   asobi config set <k> <v>     Set config (url, api_key, saas_url)
   asobi config show            Show current config
+  asobi upgrade                Update asobi to the latest release
   asobi version                Show version, commit, and build date
   asobi help                   Show this help
 
@@ -124,6 +130,12 @@ func cmdVersion() {
 	fmt.Printf("asobi %s\n", version)
 	fmt.Printf("  commit: %s\n", commit)
 	fmt.Printf("  built:  %s\n", date)
+}
+
+func cmdUpgrade() {
+	if err := update.SelfUpgrade(version, os.Stdout); err != nil {
+		fatal("%v", err)
+	}
 }
 
 // --- Login/Logout/Whoami ---
