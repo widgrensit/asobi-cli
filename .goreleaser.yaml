@@ -40,6 +40,19 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+# Sign checksums.txt with the release ed25519 key (ASOBI_SIGNING_KEY secret, a
+# PEM private key). `asobi upgrade` verifies checksums.txt.sig against the
+# embedded public key, so a GitHub/CDN compromise alone cannot forge an upgrade.
+# The raw signature is produced with openssl and read by Go's crypto/ed25519.
+signs:
+  - id: ed25519
+    artifacts: checksum
+    signature: "${artifact}.sig"
+    cmd: ./scripts/sign-checksums.sh
+    args:
+      - "${artifact}"
+      - "${signature}"
+
 release:
   github:
     owner: widgrensit

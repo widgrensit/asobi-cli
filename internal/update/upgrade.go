@@ -89,6 +89,13 @@ func SelfUpgrade(current string, w io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("download checksums: %w", err)
 	}
+	sig, err := download(fmt.Sprintf("%s/%s/checksums.txt.sig", releasesBaseURL, latest))
+	if err != nil {
+		return fmt.Errorf("download signature: %w", err)
+	}
+	if err := verifySignature(sums, sig); err != nil {
+		return err
+	}
 	if err := verifyChecksum(asset, sums, name); err != nil {
 		return err
 	}

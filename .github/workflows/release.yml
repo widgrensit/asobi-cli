@@ -26,3 +26,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCOOP_TOKEN: ${{ secrets.SCOOP_TOKEN }}
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          ASOBI_SIGNING_KEY: ${{ secrets.ASOBI_SIGNING_KEY }}
