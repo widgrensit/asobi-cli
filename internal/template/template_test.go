@@ -173,4 +173,24 @@ func TestFetchE2E(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "lua", "match.lua")); err != nil {
 		t.Errorf("defold template missing bundled lua/match.lua: %v", err)
 	}
+
+	// The backend template must ship a multi-mode manifest (config.lua mapping
+	// more than one mode to more than one script), so it demonstrates how to
+	// deploy different modes - not just the single default.
+	bdir := t.TempDir()
+	if _, err := Fetch("backend", bdir); err != nil {
+		t.Fatalf("Fetch(backend): %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(bdir, "lua", "config.lua"))
+	if err != nil {
+		t.Fatalf("backend template missing lua/config.lua: %v", err)
+	}
+	for _, script := range []string{"match.lua", "party.lua"} {
+		if !strings.Contains(string(manifest), script) {
+			t.Errorf("config.lua manifest does not map %q; got:\n%s", script, manifest)
+		}
+		if _, err := os.Stat(filepath.Join(bdir, "lua", script)); err != nil {
+			t.Errorf("backend template missing lua/%s: %v", script, err)
+		}
+	}
 }
