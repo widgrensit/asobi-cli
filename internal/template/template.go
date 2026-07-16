@@ -31,7 +31,7 @@ var registry = map[string]Template{
 	"defold":  {Repo: "asobi-defold-demo", Ref: "v0.2.0", Name: "Defold"},
 	"godot":   {Repo: "asobi-godot-demo", Ref: "v0.2.0", Name: "Godot"},
 	"unity":   {Repo: "asobi-unity-demo", Ref: "v0.2.0", Name: "Unity"},
-	"backend": {Repo: "sdk_demo_backend", Ref: "v0.1.0", Name: "Backend"},
+	"backend": {Repo: "sdk_demo_backend", Ref: "v0.2.0", Name: "Backend"},
 }
 
 const (
