@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -31,7 +32,7 @@ var (
 func main() {
 	if len(os.Args) < 2 {
 		usage()
-		os.Exit(1)
+		exit(1)
 	}
 
 	switch os.Args[1] {
@@ -80,10 +81,10 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		usage()
-		os.Exit(1)
+		exit(1)
 	}
 
-	update.Notify(version, os.Args[1], os.Stderr)
+	notifyUpdate()
 }
 
 func usage() {
@@ -355,7 +356,7 @@ func firstArg(args []string) string {
 func cmdConfig() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: asobi config <set|show>")
-		os.Exit(1)
+		exit(1)
 	}
 
 	switch os.Args[2] {
@@ -376,7 +377,7 @@ func cmdConfig() {
 		if len(os.Args) < 5 {
 			fmt.Println("Usage: asobi config set <key> <value>")
 			fmt.Println("Keys: url, api_key, saas_url")
-			os.Exit(1)
+			exit(1)
 		}
 		key, value := os.Args[3], os.Args[4]
 		cfg, err := config.Load()
@@ -401,7 +402,7 @@ func cmdConfig() {
 
 	default:
 		fmt.Println("Usage: asobi config <set|show>")
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -433,7 +434,23 @@ func startSpinner() func() {
 
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	os.Exit(1)
+	exit(1)
+}
+
+// exit is the single process-exit chokepoint. It surfaces the update notice
+// before terminating, so a failing command (which reaches os.Exit via fatal,
+// bypassing any deferred main-level notice) still nudges the user to upgrade.
+func exit(code int) {
+	notifyUpdate()
+	os.Exit(code)
+}
+
+func notifyUpdate() { notifyUpdateTo(os.Stderr) }
+
+func notifyUpdateTo(w io.Writer) {
+	if len(os.Args) > 1 {
+		update.Notify(version, os.Args[1], w)
+	}
 }
 
 // --- Destroy ---
@@ -460,7 +477,7 @@ func cmdDestroy() {
 func cmdEnv() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: asobi env list [--ephemeral] [--json]")
-		os.Exit(1)
+		exit(1)
 	}
 
 	switch os.Args[2] {

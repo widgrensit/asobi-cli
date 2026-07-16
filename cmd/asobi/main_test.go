@@ -1,6 +1,43 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+// A command that exits via fatal() must still surface the upgrade notice:
+// os.Exit skips deferred main-level notices, so failing commands route
+// through exit() -> notifyUpdate. This drives that wiring off a seeded
+// cache so it never touches the network.
+func TestNotifyUpdateWiring(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("ASOBI_NO_UPDATE_CHECK", "")
+	t.Setenv("CI", "")
+	asobiDir := filepath.Join(dir, ".asobi")
+	if err := os.MkdirAll(asobiDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cache := `{"checked_at":"` + time.Now().Format(time.RFC3339) + `","latest":"v9.9.9"}`
+	if err := os.WriteFile(filepath.Join(asobiDir, "version_check.json"), []byte(cache), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldVersion, oldArgs := version, os.Args
+	version = "v0.0.1"
+	os.Args = []string{"asobi", "health"}
+	t.Cleanup(func() { version, os.Args = oldVersion, oldArgs })
+
+	var buf bytes.Buffer
+	notifyUpdateTo(&buf)
+	if !strings.Contains(buf.String(), "v9.9.9") {
+		t.Errorf("failing-command exit path did not surface upgrade notice; got %q", buf.String())
+	}
+}
 
 func TestIsHealthy(t *testing.T) {
 	for _, s := range []string{"ok", "healthy"} {
