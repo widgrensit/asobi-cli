@@ -1,133 +1,85 @@
+// Package scaffold writes a starter server-Lua game into a directory from one of
+// a few genre templates (a real-time arena, a chat room, a turn-based game, a
+// persistent world, or a plain default). The templates are embedded, so a
+// scaffold is offline and instant - unlike the engine demos in package template,
+// which fetch a full client+backend repo.
 package scaffold
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
-const matchLua = `-- match.lua - a minimal server-authoritative Asobi game mode.
--- The engine loads this file as the "default" game mode and drives the
--- callbacks below. See https://github.com/widgrensit/asobi_lua for the
--- full game.* API (economy, leaderboards, storage, spatial, ...).
+//go:embed all:templates
+var templates embed.FS
 
--- Players needed before a match starts. Required.
-match_size = 2
+// defaultGenre is scaffolded when Init is called with an empty genre (plain
+// `asobi init` with no --template).
+const defaultGenre = "basic"
 
--- init builds the initial match state.
-function init(config)
-    return { players = {}, tick_count = 0 }
-end
-
--- join runs when a player enters the match.
-function join(player_id, state)
-    state.players[player_id] = { x = 0, y = 0 }
-    return state
-end
-
--- leave runs when a player disconnects.
-function leave(player_id, state)
-    state.players[player_id] = nil
-    return state
-end
-
--- handle_input applies a client message to the state.
-function handle_input(player_id, input, state)
-    local player = state.players[player_id]
-    if player and input then
-        player.x = (player.x or 0) + (input.dx or 0)
-        player.y = (player.y or 0) + (input.dy or 0)
-    end
-    return state
-end
-
--- tick advances the simulation (~10 times per second).
-function tick(state)
-    state.tick_count = (state.tick_count or 0) + 1
-    return state
-end
-
--- get_state returns the view sent to a given player.
-function get_state(player_id, state)
-    return state
-end
-`
-
-const readmeMd = `# My Asobi game
-
-A minimal server-authoritative multiplayer game running on
-[Asobi](https://github.com/widgrensit/asobi).
-
-The game logic lives in ` + "`lua/match.lua`" + `. The engine loads it as the
-` + "`default`" + ` game mode and drives the callbacks ` + "`init`, `join`, `leave`," + `
-` + "`handle_input`, `tick` and `get_state`. `match_size`" + ` sets how many players
-are needed to start a match.
-
-## Run it locally
-
-No account, no keys - runs the asobi_lua image + Postgres in Docker:
-
-` + "```bash" + `
-asobi dev
-` + "```" + `
-
-Edit ` + "`lua/`" + ` and it hot-reloads. API + WebSocket on http://localhost:8084.
-
-## Deploy to Asobi Cloud
-
-Managed hosting - this needs a login:
-
-` + "```bash" + `
-asobi login
-asobi use <game>       # list yours: asobi games
-asobi create <env>     # e.g. asobi create prod
-asobi deploy <env> lua
-` + "```" + `
-
-## Multiple game modes
-
-To run more than the ` + "`default`" + ` mode, add a ` + "`lua/config.lua`" + ` manifest
-mapping mode names to files:
-
-` + "```lua" + `
-return {
-    default = "match.lua",
-    ranked  = "ranked.lua"
-}
-` + "```" + `
-
-Clients pick a mode with ` + "`matchmaker.add {mode = \"ranked\"}`" + `.
-
-## A full backend example
-
-Want the whole picture - Docker Compose, the mode manifest, all the
-` + "`ASOBI_*`" + ` env vars in one runnable repo?
-
-` + "```bash" + `
-asobi init mybackend --template backend
-` + "```" + `
-
-## Connect a client
-
-Defold quickstart: https://github.com/widgrensit/asobi-defold
-`
-
-type file struct {
-	path    string
-	content string
+// Genres returns the selectable genre names, sorted (e.g. arena, basic, chat,
+// turn-based, world).
+func Genres() []string {
+	entries, err := templates.ReadDir("templates")
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
-// Init scaffolds a minimal working server-Lua game into dir. It returns the
-// list of created file paths (relative to dir). It refuses to overwrite any
-// existing target file, in particular an existing lua/match.lua.
-func Init(dir string) ([]string, error) {
-	files := []file{
-		{filepath.Join("lua", "match.lua"), matchLua},
-		{"README.md", readmeMd},
+// IsGenre reports whether name is a known genre template.
+func IsGenre(name string) bool {
+	_, err := fs.Stat(templates, "templates/"+name)
+	return err == nil
+}
+
+// Init scaffolds the genre's starter game into dir. An empty genre means the
+// default starter. It returns the created file paths (relative to dir) and
+// refuses to overwrite any existing target file, in particular lua/match.lua.
+func Init(dir, genre string) ([]string, error) {
+	if genre == "" {
+		genre = defaultGenre
+	}
+	root := "templates/" + genre
+	if !IsGenre(genre) {
+		return nil, fmt.Errorf("unknown template %q; available: %s", genre, strings.Join(Genres(), ", "))
+	}
+
+	type file struct{ rel, content string }
+	var files []file
+	err := fs.WalkDir(templates, root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		content, err := templates.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel := filepath.FromSlash(strings.TrimPrefix(p, root+"/"))
+		files = append(files, file{rel, string(content)})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read %s template: %w", genre, err)
 	}
 
 	for _, f := range files {
-		full := filepath.Join(dir, f.path)
+		full := filepath.Join(dir, f.rel)
 		if _, err := os.Stat(full); err == nil {
 			return nil, fmt.Errorf("%s already exists; refusing to overwrite", full)
 		}
@@ -135,14 +87,15 @@ func Init(dir string) ([]string, error) {
 
 	var created []string
 	for _, f := range files {
-		full := filepath.Join(dir, f.path)
+		full := filepath.Join(dir, f.rel)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			return created, fmt.Errorf("create dir for %s: %w", f.path, err)
+			return created, fmt.Errorf("create dir for %s: %w", f.rel, err)
 		}
 		if err := os.WriteFile(full, []byte(f.content), 0o644); err != nil {
-			return created, fmt.Errorf("write %s: %w", f.path, err)
+			return created, fmt.Errorf("write %s: %w", f.rel, err)
 		}
-		created = append(created, f.path)
+		created = append(created, f.rel)
 	}
+	sort.Strings(created)
 	return created, nil
 }

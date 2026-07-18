@@ -9,7 +9,7 @@ import (
 
 func TestInitCreatesWorkingGame(t *testing.T) {
 	dir := t.TempDir()
-	created, err := Init(dir)
+	created, err := Init(dir, "")
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -67,11 +67,79 @@ func TestInitRefusesToOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Init(dir); err == nil {
+	if _, err := Init(dir, ""); err == nil {
 		t.Fatal("expected error when match.lua already exists")
 	}
 	data, _ := os.ReadFile(existing)
 	if string(data) != "-- mine\n" {
 		t.Fatalf("existing match.lua was overwritten: %q", data)
+	}
+}
+
+func TestInitUnknownGenre(t *testing.T) {
+	if _, err := Init(t.TempDir(), "roguelike"); err == nil {
+		t.Fatal("expected error for unknown genre")
+	}
+}
+
+// Every genre scaffolds a lua/match.lua declaring match_size plus the callbacks
+// its bridge requires, and a README that runs locally and deploys.
+func TestEveryGenreScaffoldsARunnableGame(t *testing.T) {
+	genres := Genres()
+	if len(genres) < 5 {
+		t.Fatalf("expected the genre set to include basic + 4 starters, got %v", genres)
+	}
+	for _, g := range []string{"arena", "basic", "chat", "turn-based", "world"} {
+		if !IsGenre(g) {
+			t.Fatalf("expected %q to be a known genre", g)
+		}
+	}
+
+	for _, g := range genres {
+		t.Run(g, func(t *testing.T) {
+			dir := t.TempDir()
+			created, err := Init(dir, g)
+			if err != nil {
+				t.Fatalf("Init(%q): %v", g, err)
+			}
+			hasLua, hasReadme := false, false
+			for _, f := range created {
+				if f == filepath.Join("lua", "match.lua") {
+					hasLua = true
+				}
+				if f == "README.md" {
+					hasReadme = true
+				}
+			}
+			if !hasLua || !hasReadme {
+				t.Fatalf("%q scaffold missing lua/match.lua or README.md: %v", g, created)
+			}
+
+			lua, err := os.ReadFile(filepath.Join(dir, "lua", "match.lua"))
+			if err != nil {
+				t.Fatalf("read match.lua: %v", err)
+			}
+			needed := []string{"match_size", "function init(", "function join(", "function leave(", "function handle_input(", "function get_state("}
+			if g == "world" {
+				needed = append(needed, `game_type = "world"`, "function spawn_position(", "function zone_tick(", "function post_tick(")
+			} else {
+				needed = append(needed, "function tick(")
+			}
+			for _, cb := range needed {
+				if !strings.Contains(string(lua), cb) {
+					t.Fatalf("%q match.lua missing %q", g, cb)
+				}
+			}
+
+			readme, err := os.ReadFile(filepath.Join(dir, "README.md"))
+			if err != nil {
+				t.Fatalf("read README.md: %v", err)
+			}
+			for _, hint := range []string{"asobi dev", "asobi deploy"} {
+				if !strings.Contains(string(readme), hint) {
+					t.Fatalf("%q README.md missing %q", g, hint)
+				}
+			}
+		})
 	}
 }
