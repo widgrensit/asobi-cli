@@ -96,8 +96,9 @@ Usage:
   asobi whoami                 Show current credential info
   asobi init [dir]             Scaffold a starter Lua game
   asobi init [dir] --template <name>
-                              Scaffold a runnable project:
-                              defold|godot|unity (client demo) or backend (server only)
+                              Scaffold a runnable project. Genre starter:
+                              arena|chat|turn-based|world (server Lua), or a full
+                              demo: defold|godot|unity (client) / backend (server)
   asobi dev [--port N] [--dir <lua>]
                               Run a local backend for your Lua game (Docker)
   asobi games                  List your tenant's games
@@ -700,7 +701,7 @@ func cmdUse() {
 
 func cmdInit() {
 	args := os.Args[2:]
-	engine, args := extractFlag(args, "--template")
+	tmpl, args := extractFlag(args, "--template")
 
 	dir := "."
 	for _, a := range args {
@@ -715,41 +716,27 @@ func cmdInit() {
 		}
 	}
 
-	if engine != "" {
-		t, ok := template.Get(engine)
-		if !ok {
-			fatal("unknown template %q; available: %s", engine, strings.Join(template.Names(), ", "))
+	// A genre name scaffolds server Lua locally; an engine name fetches a full
+	// demo repo. Everything else is an error listing both.
+	if tmpl != "" && !scaffold.IsGenre(tmpl) {
+		if _, ok := template.Get(tmpl); ok {
+			initFromTemplate(tmpl, dir)
+			return
 		}
-		fmt.Printf("Fetching the %s template into %s ...\n", t.Name, dir)
-		created, err := template.Fetch(engine, dir)
-		if err != nil {
-			fatal("init: %v", err)
-		}
-		fmt.Printf("Scaffolded the %s game template in %s\n", t.Name, dir)
-		for _, f := range created {
-			fmt.Printf("  created %s\n", f)
-		}
-		fmt.Println("\nNext steps:")
-		n := 1
-		step := func(s string) { fmt.Printf("  %d. %s\n", n, s); n++ }
-		if dir != "." {
-			step("cd " + dir)
-		}
-		if engine == "backend" {
-			step("docker compose up -d   (asobi_lua image + Postgres on :8084)")
-			step("Open README.md - it covers the managed (asobi deploy) vs local (compose) paths and adding modes in lua/config.lua.")
-		} else {
-			step("Open README.md - it walks through starting the backend and opening the project in " + t.Name + ".")
-		}
-		return
+		fatal("unknown template %q; genre starters: %s; full demos: %s",
+			tmpl, strings.Join(scaffold.Genres(), ", "), strings.Join(template.Names(), ", "))
 	}
 
-	created, err := scaffold.Init(dir)
+	created, err := scaffold.Init(dir, tmpl)
 	if err != nil {
 		fatal("init: %v", err)
 	}
 
-	fmt.Printf("Scaffolded a starter Asobi game in %s\n", dir)
+	if tmpl == "" {
+		fmt.Printf("Scaffolded a starter Asobi game in %s\n", dir)
+	} else {
+		fmt.Printf("Scaffolded a %s starter in %s\n", tmpl, dir)
+	}
 	for _, f := range created {
 		fmt.Printf("  created %s\n", f)
 	}
@@ -759,11 +746,37 @@ func cmdInit() {
 	if dir != "." {
 		step("cd " + dir)
 	}
-	step("asobi login")
+	step("asobi dev              (run it locally on http://localhost:8084 - Docker, no login)")
+	step("asobi login            (then deploy to Asobi Cloud)")
 	step("asobi use <game>       (list yours: asobi games)")
 	step("asobi create <env>     (e.g. asobi create prod)")
 	step("asobi deploy <env> lua")
 	step("Connect a client - Defold quickstart: https://github.com/widgrensit/asobi-defold")
+}
+
+func initFromTemplate(engine, dir string) {
+	t, _ := template.Get(engine)
+	fmt.Printf("Fetching the %s template into %s ...\n", t.Name, dir)
+	created, err := template.Fetch(engine, dir)
+	if err != nil {
+		fatal("init: %v", err)
+	}
+	fmt.Printf("Scaffolded the %s game template in %s\n", t.Name, dir)
+	for _, f := range created {
+		fmt.Printf("  created %s\n", f)
+	}
+	fmt.Println("\nNext steps:")
+	n := 1
+	step := func(s string) { fmt.Printf("  %d. %s\n", n, s); n++ }
+	if dir != "." {
+		step("cd " + dir)
+	}
+	if engine == "backend" {
+		step("docker compose up -d   (asobi_lua image + Postgres on :8084)")
+		step("Open README.md - it covers the managed (asobi deploy) vs local (compose) paths and adding modes in lua/config.lua.")
+	} else {
+		step("Open README.md - it walks through starting the backend and opening the project in " + t.Name + ".")
+	}
 }
 
 func cmdDev() {

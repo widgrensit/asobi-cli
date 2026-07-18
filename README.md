@@ -83,6 +83,7 @@ asobi deploy prod game/
 | `asobi logout` | Clear stored credentials |
 | `asobi whoami` | Show current session info (including the active game) |
 | `asobi init [dir]` | Scaffold a minimal working starter Lua game |
+| `asobi init [dir] --template <name>` | Scaffold a genre starter (`arena`, `chat`, `turn-based`, `world`) or fetch a full demo (`defold`, `godot`, `unity`, `backend`) |
 | `asobi games` | List your tenant's games (marks the active one) |
 | `asobi use <slug>` | Set the active game (persisted in `~/.asobi`) |
 | `asobi create <name> [--size xs\|s\|m\|l] [--game <slug>]` | Create an environment |
@@ -120,9 +121,27 @@ asobi deploy prod lua --game ctf   # override for one command
 ```bash
 asobi init mygame      # scaffold lua/match.lua + README.md
 cd mygame
+asobi dev              # run it locally on :8084 (Docker, no login)
 asobi login
 asobi use <game>
 asobi deploy prod lua
+```
+
+Pick a genre starter instead of the plain scaffold - each writes a runnable
+`lua/match.lua` shaped for that style of game:
+
+```bash
+asobi init mygame --template arena       # real-time movement + combat
+asobi init mygame --template chat        # a real-time chat room
+asobi init mygame --template turn-based  # server-enforced turn order
+asobi init mygame --template world       # a persistent shared world
+```
+
+To see a full client + backend project instead, use a demo template
+(`defold`, `godot`, `unity`, or `backend`) - these fetch a pinned repo:
+
+```bash
+asobi init mygame --template defold
 ```
 
 ## Ephemeral deploys (CI)
