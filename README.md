@@ -88,7 +88,6 @@ asobi deploy prod game/
 | `asobi use <slug>` | Set the active game (persisted in `~/.asobi`) |
 | `asobi create <name> [--size xs\|s\|m\|l] [--game <slug>]` | Create an environment |
 | `asobi deploy <env-name> [dir] [--game <slug>]` | Deploy Lua scripts to an environment (`dir` defaults to `.`) |
-| `asobi deploy --ephemeral [--name N] [--json]` | Create a fresh ephemeral env (1h TTL) and return env_id + api_key |
 | `asobi stop <name> [--game <slug>]` | Stop a running environment |
 | `asobi start <name> [--game <slug>]` | Start a stopped environment |
 | `asobi resize <name> --size <xs\|s\|m\|l> [--game <slug>]` | Resize an environment |
@@ -97,7 +96,7 @@ asobi deploy prod game/
 | `asobi envs [--game <slug>]` | List your environments |
 | `asobi env list [--ephemeral] [--json]` | Structured environment list for scripting |
 | `asobi health` | Check engine health |
-| `asobi config set <k> <v>` | Set manual config (`url`, `api_key`, `saas_url`) |
+| `asobi config set <k> <v>` | Set manual config (`url`, `api_key`) |
 | `asobi config show` | Show current config |
 
 ## Selecting a game
@@ -144,25 +143,25 @@ To see a full client + backend project instead, use a demo template
 asobi init mygame --template defold
 ```
 
-## Ephemeral deploys (CI)
+## Throwaway envs (CI)
 
-For CI integration tests, use `--ephemeral` to create a fresh isolated env
-that auto-deletes after 1 hour:
+For CI integration tests, create a uniquely-named env, deploy to it, and destroy
+it in a trap so cleanup runs even on failure. `asobi env list --json` gives you
+the env id to destroy:
 
 ```bash
-DEPLOY=$(asobi deploy --ephemeral --json)
-ENV_ID=$(echo "$DEPLOY" | jq -r .env_id)
-ASOBI_API_KEY=$(echo "$DEPLOY" | jq -r .api_key)
+NAME="ci-$GITHUB_RUN_ID"
+asobi create "$NAME"
+asobi deploy "$NAME" lua
 
-# Trap ensures cleanup even on failure
+ENV_ID=$(asobi env list --json | jq -r ".[] | select(.name==\"$NAME\") | .id")
 trap "asobi destroy $ENV_ID" EXIT
 
-# ... run tests against the ephemeral env ...
+# ... run tests against the env ...
 ```
 
-The 1-hour TTL is a safety net - if `trap` doesn't fire (runner timeout,
-cancelled job), the server-side reaper deletes the env automatically within
-5 minutes of expiry. No manual cleanup needed.
+`asobi destroy <env_id>` is idempotent and revokes the env's keys, so a repeated
+or racing cleanup is safe.
 
 ### Login options
 
@@ -194,11 +193,10 @@ The `ASOBI_ACCESS_TOKEN` environment variable overrides the stored access token,
 
 When credentials are present (from `asobi login`):
 
-1. The CLI mints a **1-hour ephemeral engine API key** via the dashboard (`POST /internal/cli/mint-key`), authenticated with the stored access token.
-2. If the access token has expired, the CLI auto-refreshes it from the refresh token (bound to the device fingerprint from login).
-3. The ephemeral key is used for the actual deploy call to the engine.
+1. The CLI zips the `.lua` files and posts the bundle to the control plane, authenticated with the stored access token (`Authorization: Bearer <access_token>`).
+2. If the access token has expired, the CLI auto-refreshes it from the refresh token (bound to the device fingerprint from login) and retries the deploy.
 
-This means a compromised credential file has limited blast radius - the access token can mint deploy keys but expires in 24 hours, and the refresh token is bound to the device it was issued on.
+This means a compromised credential file has limited blast radius - the access token is short-lived, and the refresh token is bound to the device it was issued on.
 
 When no credentials are present, the CLI falls back to the manual `api_key` from `asobi config set` - backwards compatible for self-hosted setups.
 
