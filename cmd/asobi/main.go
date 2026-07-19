@@ -111,7 +111,7 @@ Usage:
   asobi delete <name> [--game <slug>]          Delete an environment
   asobi envs [--game <slug>]   List your environments
   asobi health [env] [--game <slug>]   Check engine health (of an environment)
-  asobi config set <k> <v>     Set config (url, api_key, saas_url)
+  asobi config set <k> <v>     Set config (url, api_key)
   asobi config show            Show current config
   asobi upgrade                Update asobi to the latest release
   asobi version                Show version, commit, and build date
@@ -377,7 +377,7 @@ func cmdConfig() {
 	case "set":
 		if len(os.Args) < 5 {
 			fmt.Println("Usage: asobi config set <key> <value>")
-			fmt.Println("Keys: url, api_key, saas_url")
+			fmt.Println("Keys: url, api_key")
 			exit(1)
 		}
 		key, value := os.Args[3], os.Args[4]
