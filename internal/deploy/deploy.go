@@ -7,9 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/widgrensit/asobi-cli/internal/client"
 )
+
+// zipEpoch is a fixed, valid DOS-representable timestamp. Stamping every
+// entry with it keeps bundles byte-reproducible and avoids the invalid
+// 1980-00-00 date that a zero mtime encodes to (asobi-cli#34).
+var zipEpoch = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func CollectScripts(dir string) ([]client.Script, error) {
 	var scripts []client.Script
@@ -51,7 +57,11 @@ func ZipScripts(scripts []client.Script) ([]byte, error) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 	for _, s := range scripts {
-		f, err := w.Create(s.Path)
+		f, err := w.CreateHeader(&zip.FileHeader{
+			Name:     s.Path,
+			Method:   zip.Deflate,
+			Modified: zipEpoch,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("zip create %s: %w", s.Path, err)
 		}
