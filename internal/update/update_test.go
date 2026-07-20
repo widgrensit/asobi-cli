@@ -65,7 +65,9 @@ func TestLatestReleaseTag(t *testing.T) {
 }
 
 func TestNotify(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 	t.Setenv("ASOBI_NO_UPDATE_CHECK", "")
 	t.Setenv("CI", "")
 	// Fresh cache advertising a newer release; Notify must not hit the network.
@@ -85,7 +87,9 @@ func TestNotify(t *testing.T) {
 }
 
 func TestNotifySkips(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 	writeCache(cache{CheckedAt: time.Now(), Latest: "v0.9.0"})
 
 	cases := []struct {

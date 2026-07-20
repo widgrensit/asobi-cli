@@ -16,6 +16,9 @@ import (
 func TestNotifyUpdateWiring(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	// os.UserHomeDir reads USERPROFILE on Windows, so HOME alone does not
+	// redirect the cache dir there; set both to pin it to the temp dir.
+	t.Setenv("USERPROFILE", dir)
 	t.Setenv("ASOBI_NO_UPDATE_CHECK", "")
 	t.Setenv("CI", "")
 	asobiDir := filepath.Join(dir, ".asobi")

@@ -115,8 +115,12 @@ func TestReplaceExecutable(t *testing.T) {
 	if string(got) != "new binary" {
 		t.Errorf("content = %q, want new binary", got)
 	}
-	if info, _ := os.Stat(exe); info.Mode().Perm()&0o100 == 0 {
-		t.Error("replaced binary is not executable")
+	// Windows has no Unix execute bit; executability is by file extension, so
+	// this assertion only applies off Windows.
+	if runtime.GOOS != "windows" {
+		if info, _ := os.Stat(exe); info.Mode().Perm()&0o100 == 0 {
+			t.Error("replaced binary is not executable")
+		}
 	}
 	if err := replaceExecutable(exe, nil); err == nil {
 		t.Error("empty binary must be refused")
