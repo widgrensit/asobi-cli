@@ -8,7 +8,9 @@ import (
 )
 
 // Credentials holds the CLI's saas session tokens and associated context.
-// Stored in ~/.asobi/credentials.json with 0600 permissions.
+// Stored in ~/.asobi/credentials.json with 0600 permissions. On Windows,
+// where the file mode does not create an ACL, the blob is additionally
+// encrypted at rest with DPAPI scoped to the current user (see protect).
 type Credentials struct {
 	AccessToken       string `json:"access_token"`
 	RefreshToken      string `json:"refresh_token"`
@@ -36,12 +38,16 @@ func credentialsPath() string {
 // credentials exist (not an error — user hasn't logged in yet).
 // The ASOBI_ACCESS_TOKEN env var overrides the stored access token.
 func LoadCredentials() (*Credentials, error) {
-	data, err := os.ReadFile(credentialsPath())
+	blob, err := os.ReadFile(credentialsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read credentials: %w", err)
+	}
+	data, err := unprotect(blob)
+	if err != nil {
+		return nil, fmt.Errorf("unprotect credentials: %w", err)
 	}
 	var creds Credentials
 	if err := json.Unmarshal(data, &creds); err != nil {
@@ -63,7 +69,11 @@ func SaveCredentials(creds *Credentials) error {
 	if err != nil {
 		return fmt.Errorf("marshal credentials: %w", err)
 	}
-	return os.WriteFile(credentialsPath(), data, 0o600)
+	blob, err := protect(data)
+	if err != nil {
+		return fmt.Errorf("protect credentials: %w", err)
+	}
+	return os.WriteFile(credentialsPath(), blob, 0o600)
 }
 
 // DeleteCredentials removes the stored credentials file.
