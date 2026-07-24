@@ -236,6 +236,9 @@ func cmdDeploy() {
 	if len(scripts) == 0 {
 		fatal("no .lua files found in %s", dir)
 	}
+	if err := deploy.Validate(scripts); err != nil {
+		fatal("bundle validation failed:\n%v", err)
+	}
 
 	creds := mustLoadCreds()
 	game := resolveGame(gameFlag, creds)
