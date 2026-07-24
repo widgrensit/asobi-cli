@@ -39,7 +39,11 @@ func CollectScripts(dir string) ([]client.Script, error) {
 		}
 
 		scripts = append(scripts, client.Script{
-			Path:    rel,
+			// Zip entry names must use forward slashes (APPNOTE 4.4.17). On
+			// Windows filepath.Rel yields backslashes, which the engine then
+			// writes as literal backslash-named files (config.lua/match.lua
+			// never found -> guest_auth off, modes don't load). Normalise.
+			Path:    filepath.ToSlash(rel),
 			Content: string(content),
 		})
 		return nil
@@ -58,7 +62,11 @@ func ZipScripts(scripts []client.Script) ([]byte, error) {
 	w := zip.NewWriter(&buf)
 	for _, s := range scripts {
 		f, err := w.CreateHeader(&zip.FileHeader{
-			Name:     s.Path,
+			// Enforce forward-slash entry names (APPNOTE 4.4.17) regardless of
+			// how Path was built, so a Windows-authored path never ships a
+			// backslash entry the engine can't resolve. Cross-platform, unlike
+			// filepath.ToSlash which is a no-op when the OS separator is '/'.
+			Name:     strings.ReplaceAll(s.Path, "\\", "/"),
 			Method:   zip.Deflate,
 			Modified: zipEpoch,
 		})

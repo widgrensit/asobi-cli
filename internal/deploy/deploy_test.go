@@ -3,6 +3,7 @@ package deploy
 import (
 	"archive/zip"
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/widgrensit/asobi-cli/internal/client"
@@ -37,6 +38,36 @@ func TestZipScriptsEmitsValidTimestamps(t *testing.T) {
 		if f.Method != zip.Deflate {
 			t.Errorf("%s: method = %d, want Deflate", f.Name, f.Method)
 		}
+	}
+}
+
+func TestZipScriptsNormalisesWindowsPaths(t *testing.T) {
+	// A Windows-authored path (filepath.Rel yields backslashes there) must ship
+	// as a forward-slash zip entry, or the engine writes a literal
+	// backslash-named file and never finds config.lua/match.lua.
+	scripts := []client.Script{
+		{Path: "config.lua", Content: "return {}"},
+		{Path: "grid1\\match.lua", Content: "return {}"},
+	}
+
+	archive, err := ZipScripts(scripts)
+	if err != nil {
+		t.Fatalf("ZipScripts: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+
+	names := map[string]bool{}
+	for _, f := range zr.File {
+		if strings.Contains(f.Name, "\\") {
+			t.Errorf("entry %q contains a backslash separator", f.Name)
+		}
+		names[f.Name] = true
+	}
+	if !names["grid1/match.lua"] {
+		t.Errorf("want entry grid1/match.lua, got %v", names)
 	}
 }
 
