@@ -20,7 +20,7 @@ func TestWindowsEncryptsCredentialsAtRest(t *testing.T) {
 		t.Fatalf("SaveCredentials: %v", err)
 	}
 
-	raw, err := os.ReadFile(credentialsPath())
+	raw, err := os.ReadFile(mustCredentialsPath(t))
 	if err != nil {
 		t.Fatalf("read raw file: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestWindowsLoadsLegacyPlaintextThenReEncrypts(t *testing.T) {
 	if err := os.MkdirAll(dir+"/.asobi", 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(credentialsPath(), plain, 0o600); err != nil {
+	if err := os.WriteFile(mustCredentialsPath(t), plain, 0o600); err != nil {
 		t.Fatalf("write legacy: %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestWindowsLoadsLegacyPlaintextThenReEncrypts(t *testing.T) {
 	if err := SaveCredentials(got); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	raw, err := os.ReadFile(credentialsPath())
+	raw, err := os.ReadFile(mustCredentialsPath(t))
 	if err != nil {
 		t.Fatalf("read re-saved: %v", err)
 	}
