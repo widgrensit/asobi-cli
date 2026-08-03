@@ -29,16 +29,27 @@ type Credentials struct {
 	ActiveGame string `json:"active_game"`
 }
 
-func credentialsPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".asobi", "credentials.json")
+// CredentialsPath returns the absolute path of the credentials file.
+// It fails rather than falling back to a relative path when the home
+// directory cannot be resolved, so credentials are never written to
+// whatever directory the CLI happened to be invoked from.
+func CredentialsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".asobi", "credentials.json"), nil
 }
 
 // LoadCredentials reads the stored CLI credentials. Returns nil if no
 // credentials exist (not an error — user hasn't logged in yet).
 // The ASOBI_ACCESS_TOKEN env var overrides the stored access token.
 func LoadCredentials() (*Credentials, error) {
-	blob, err := os.ReadFile(credentialsPath())
+	path, err := CredentialsPath()
+	if err != nil {
+		return nil, err
+	}
+	blob, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -60,8 +71,15 @@ func LoadCredentials() (*Credentials, error) {
 }
 
 // SaveCredentials writes credentials to disk with 0600 permissions.
+// The write goes to a temp file in the same directory and is renamed into
+// place, so a failed write can never leave half a token behind or silently
+// keep the previous credentials.
 func SaveCredentials(creds *Credentials) error {
-	dir := filepath.Dir(credentialsPath())
+	path, err := CredentialsPath()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create credentials dir: %w", err)
 	}
@@ -73,14 +91,48 @@ func SaveCredentials(creds *Credentials) error {
 	if err != nil {
 		return fmt.Errorf("protect credentials: %w", err)
 	}
-	return os.WriteFile(credentialsPath(), blob, 0o600)
+	tmp, err := os.CreateTemp(dir, ".credentials-*")
+	if err != nil {
+		return fmt.Errorf("create temp credentials: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(blob); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write credentials: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write credentials: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("write credentials: %w", err)
+	}
+	return nil
 }
 
-// DeleteCredentials removes the stored credentials file.
+// DeleteCredentials removes the stored credentials file, including the
+// legacy token file.
 func DeleteCredentials() error {
-	err := os.Remove(credentialsPath())
-	if err != nil && !os.IsNotExist(err) {
+	path, err := CredentialsPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove credentials: %w", err)
+	}
+	return RemoveLegacyCredentials()
+}
+
+// RemoveLegacyCredentials deletes ~/.asobi/auth, the token file written by
+// CLI versions before credentials.json. Left behind it is a live copy of
+// expired tokens that an older binary still on PATH will keep using.
+func RemoveLegacyCredentials() error {
+	path, err := CredentialsPath()
+	if err != nil {
+		return err
+	}
+	legacy := filepath.Join(filepath.Dir(path), "auth")
+	if err := os.Remove(legacy); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove legacy credentials: %w", err)
 	}
 	return nil
 }

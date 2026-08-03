@@ -169,6 +169,11 @@ func cmdLogin() {
 		fatal("%v", err)
 	}
 
+	credsPath, err := auth.CredentialsPath()
+	if err != nil {
+		fatal("%v — set HOME so the CLI can store credentials", err)
+	}
+
 	fmt.Printf("Connecting to %s\n", saasURL)
 	fmt.Printf("Token name: %s\n", tokenName)
 
@@ -180,12 +185,15 @@ func cmdLogin() {
 	if err := auth.SaveCredentials(creds); err != nil {
 		fatal("save credentials: %v", err)
 	}
+	if err := auth.RemoveLegacyCredentials(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	}
 
 	fmt.Println("\nLogin successful!")
 	fmt.Printf("  Tenant: %s\n", creds.TenantID)
 	fmt.Printf("  Game:   %s\n", gameLabel(creds.ActiveGame))
 	fmt.Printf("  SaaS:   %s\n", creds.SaasURL)
-	fmt.Printf("\nCredentials stored in ~/.asobi/credentials.json\n")
+	fmt.Printf("\nCredentials stored in %s\n", credsPath)
 	fmt.Println("Run `asobi games` to list games, then `asobi use <slug>` to pick one.")
 	fmt.Println("Run `asobi create <name>` to create an environment.")
 }
