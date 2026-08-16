@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,6 +57,8 @@ func main() {
 		cmdStart()
 	case "resize":
 		cmdResize()
+	case "retention":
+		cmdRetention()
 	case "delete":
 		cmdDelete()
 	case "envs":
@@ -108,6 +111,9 @@ Usage:
   asobi stop <name> [--game <slug>]            Stop an environment
   asobi start <name> [--game <slug>]           Start an environment
   asobi resize <name> --size <xs|s|m|l> [--game <slug>]  Resize an environment
+  asobi retention <name> --after <never|7|30|90|365> [--game <slug>]
+                              Keep unclaimed guests for ever, or delete them
+                              after N days without a sign-in. Owner/admin only
   asobi delete <name> [--game <slug>]          Delete an environment
   asobi envs [--game <slug>]   List your environments
   asobi health [env] [--game <slug>]   Check engine health (of an environment)
@@ -613,6 +619,37 @@ func cmdResize() {
 		fatal("resize: %v", err)
 	}
 	fmt.Printf("Environment %s resizing to %s\n", args[0], sizeFlag)
+}
+
+// Unclaimed guests are accounts nobody ever signed in to claim. Nothing
+// removes them unless an environment says how long to keep them, so a game
+// that mints a guest per device accumulates them for ever.
+//
+// --after is required and has no default. Retention deletes player accounts
+// permanently and the sweep writes no audit row, so it is spelled out on every
+// invocation rather than inherited from somewhere.
+func cmdRetention() {
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	afterFlag, args := extractFlag(args, "--after")
+	if len(args) < 1 {
+		fatal("usage: asobi retention <name> --after <never|%s> [--game <slug>]", strings.Join(auth.RetentionPeriods[1:], "|"))
+	}
+	if afterFlag == "" {
+		fatal("retention requires --after <never|%s>", strings.Join(auth.RetentionPeriods[1:], "|"))
+	}
+	if !slices.Contains(auth.RetentionPeriods, afterFlag) {
+		fatal("unknown retention period %q - accepted: %s", afterFlag, strings.Join(auth.RetentionPeriods, ", "))
+	}
+	creds := mustLoadCreds()
+	game := resolveGame(gameFlag, creds)
+	if err := auth.SetRetention(creds, game, args[0], afterFlag); err != nil {
+		fatal("retention: %v", err)
+	}
+	if afterFlag == "never" {
+		fmt.Printf("Environment %s keeps unclaimed guests for ever\n", args[0])
+		return
+	}
+	fmt.Printf("Environment %s deletes unclaimed guests after %s days of inactivity - it restarts to pick this up\n", args[0], afterFlag)
 }
 
 func cmdDelete() {
