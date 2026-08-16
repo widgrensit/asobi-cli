@@ -268,6 +268,50 @@ func ResizeEnv(creds *Credentials, game, name, size string) error {
 	return nil
 }
 
+// RetentionPeriods are the values the control plane accepts for guest
+// retention, in the order the help text lists them. Kept here so a typo is a
+// local error rather than a round trip, but the server validates against its
+// own list regardless - this is a convenience, not the check.
+var RetentionPeriods = []string{"never", "7", "30", "90", "365"}
+
+// SetRetention sets how long an environment keeps unclaimed guest accounts.
+// "never" keeps them for ever; a number is days of inactivity since the device
+// last resumed the guest. Requires an owner or admin, and rolls the
+// environment, because the engine reads the policy at boot.
+func SetRetention(creds *Credentials, game, name, after string) error {
+	body, _ := json.Marshal(map[string]string{"after": after})
+	req, err := http.NewRequest("POST", creds.SaasURL+"/internal/cli/envs/"+name+"/retention"+gameQuery(game), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		refreshed, err := RefreshAccessToken(creds)
+		if err != nil {
+			return err
+		}
+		creds.AccessToken = refreshed
+		_ = SaveCredentials(creds)
+		return SetRetention(creds, game, name, after)
+	}
+	// 403 here is a role refusal, not an expired session, and saying so saves
+	// somebody re-running `asobi login` to fix a permission they do not have.
+	if resp.StatusCode == 403 {
+		return fmt.Errorf("only an owner or admin can change guest retention")
+	}
+	if resp.StatusCode >= 400 {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("retention failed (%d): %s", resp.StatusCode, data)
+	}
+	return nil
+}
+
 // DeleteEnv deletes a named environment within a game.
 func DeleteEnv(creds *Credentials, game, name string) error {
 	req, err := http.NewRequest("DELETE", creds.SaasURL+"/internal/cli/envs/"+name+gameQuery(game), nil)
