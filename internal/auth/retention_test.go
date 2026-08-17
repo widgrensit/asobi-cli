@@ -121,3 +121,36 @@ func TestRetentionPeriodsAreTheOfferedSet(t *testing.T) {
 		}
 	}
 }
+
+// Destroy refusals have specific causes, and reporting them generically sends
+// somebody to re-run `asobi login` for a permission they do not have, or to
+// retry a call that will keep refusing.
+func TestDeleteEnvReportsRoleRefusal(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/cli/envs/prod", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(403)
+		w.Write([]byte(`{"error":"requires_owner_or_admin"}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	err := DeleteEnv(&Credentials{AccessToken: "at-1", SaasURL: srv.URL}, "", "prod")
+	if err == nil || !strings.Contains(err.Error(), "owner or admin") {
+		t.Fatalf("error = %v, want it to name the role requirement", err)
+	}
+}
+
+func TestDeleteEnvReportsProtection(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/cli/envs/prod", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(409)
+		w.Write([]byte(`{"error":"environment_protected"}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	err := DeleteEnv(&Credentials{AccessToken: "at-1", SaasURL: srv.URL}, "", "prod")
+	if err == nil || !strings.Contains(err.Error(), "protected") {
+		t.Fatalf("error = %v, want it to name the protection flag", err)
+	}
+}
