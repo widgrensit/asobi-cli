@@ -71,6 +71,8 @@ func main() {
 		cmdDestroy()
 	case "env":
 		cmdEnv()
+	case "logs":
+		cmdLogs()
 	case "health":
 		cmdHealth()
 	case "config":
@@ -117,6 +119,8 @@ Usage:
   asobi delete <name> [--game <slug>]          Destroy an environment. Durable
                               ones retire (database kept 30 days). Owner/admin only
   asobi envs [--game <slug>]   List your environments
+  asobi logs <name> [--filter <text>] [--since 1h] [--limit N] [--game <slug>]
+                              Engine logs for an environment (last hour by default)
   asobi health [env] [--game <slug>]   Check engine health (of an environment)
   asobi config set <k> <v>     Set config (url, api_key)
   asobi config show            Show current config
@@ -651,6 +655,47 @@ func cmdRetention() {
 		return
 	}
 	fmt.Printf("Environment %s deletes unclaimed guests after %s days of inactivity - it restarts to pick this up\n", args[0], afterFlag)
+}
+
+// Engine logs for one environment. The backend query is a bounded range
+// (Loki's query_range), not a stream, so there is no --follow: promising a
+// tail this cannot deliver would be worse than not offering one.
+func cmdLogs() {
+	gameFlag, args := extractFlag(os.Args[2:], "--game")
+	filterFlag, args := extractFlag(args, "--filter")
+	sinceFlag, args := extractFlag(args, "--since")
+	limitFlag, args := extractFlag(args, "--limit")
+	if len(args) < 1 {
+		fatal("usage: asobi logs <name> [--filter <text>] [--since 1h] [--limit N] [--game <slug>]")
+	}
+	since, err := auth.ParseSince(sinceFlag)
+	if err != nil {
+		fatal("%v", err)
+	}
+	limit := 0
+	if limitFlag != "" {
+		limit, err = strconv.Atoi(limitFlag)
+		if err != nil || limit <= 0 {
+			fatal("--limit must be a positive number")
+		}
+	}
+	creds := mustLoadCreds()
+	game := resolveGame(gameFlag, creds)
+	lines, err := auth.EnvLogs(creds, game, args[0], auth.LogOptions{
+		Filter: filterFlag,
+		Since:  since,
+		Limit:  limit,
+	})
+	if err != nil {
+		fatal("logs: %v", err)
+	}
+	if len(lines) == 0 {
+		fmt.Println("No log lines in that window.")
+		return
+	}
+	for _, l := range lines {
+		fmt.Printf("%s  %s\n", l.Ts, l.Line)
+	}
 }
 
 func cmdDelete() {
