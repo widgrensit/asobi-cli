@@ -312,7 +312,14 @@ func SetRetention(creds *Credentials, game, name, after string) error {
 	return nil
 }
 
-// DeleteEnv deletes a named environment within a game.
+// DeleteEnv destroys a named environment within a game. Requires an owner or
+// admin, and refuses an environment with deletion protection set.
+//
+// A durable environment is RETIRED rather than dropped: compute goes away, the
+// database is retained for 30 days, and `asobi create` can reuse the name
+// immediately. Ephemeral environments are dropped outright. The call returns as
+// soon as the teardown is queued, so the environment is still going away when
+// this returns.
 func DeleteEnv(creds *Credentials, game, name string) error {
 	req, err := http.NewRequest("DELETE", creds.SaasURL+"/internal/cli/envs/"+name+gameQuery(game), nil)
 	if err != nil {
@@ -332,6 +339,15 @@ func DeleteEnv(creds *Credentials, game, name string) error {
 		creds.AccessToken = refreshed
 		_ = SaveCredentials(creds)
 		return DeleteEnv(creds, game, name)
+	}
+	// Both of these are refusals with a specific cause, and the generic
+	// "delete failed (403)" sends somebody to re-run `asobi login` to fix a
+	// permission they do not have, or to retry a call that will keep refusing.
+	if resp.StatusCode == 403 {
+		return fmt.Errorf("only an owner or admin can destroy an environment")
+	}
+	if resp.StatusCode == 409 {
+		return fmt.Errorf("environment is protected; remove deletion protection first")
 	}
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)

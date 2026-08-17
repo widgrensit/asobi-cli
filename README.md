@@ -92,7 +92,7 @@ asobi deploy prod game/
 | `asobi start <name> [--game <slug>]` | Start a stopped environment |
 | `asobi resize <name> --size <xs\|s\|m\|l> [--game <slug>]` | Resize an environment |
 | `asobi retention <name> --after <never\|7\|30\|90\|365> [--game <slug>]` | How long the environment keeps unclaimed guest accounts. Owner or admin only |
-| `asobi delete <name> [--game <slug>]` | Delete an environment |
+| `asobi delete <name> [--game <slug>]` | Destroy an environment. A durable one retires (compute down, database kept 30 days, name reusable at once); an ephemeral one is dropped. Owner or admin only, and refused while deletion protection is set |
 | `asobi destroy <env_id>` | Delete by env_id and revoke its keys (idempotent; used by CI cleanup) |
 | `asobi envs [--game <slug>]` | List your environments |
 | `asobi env list [--ephemeral] [--json]` | Structured environment list for scripting |

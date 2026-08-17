@@ -114,7 +114,8 @@ Usage:
   asobi retention <name> --after <never|7|30|90|365> [--game <slug>]
                               Keep unclaimed guests for ever, or delete them
                               after N days without a sign-in. Owner/admin only
-  asobi delete <name> [--game <slug>]          Delete an environment
+  asobi delete <name> [--game <slug>]          Destroy an environment. Durable
+                              ones retire (database kept 30 days). Owner/admin only
   asobi envs [--game <slug>]   List your environments
   asobi health [env] [--game <slug>]   Check engine health (of an environment)
   asobi config set <k> <v>     Set config (url, api_key)
@@ -662,7 +663,10 @@ func cmdDelete() {
 	if err := auth.DeleteEnv(creds, game, args[0]); err != nil {
 		fatal("delete: %v", err)
 	}
-	fmt.Printf("Environment %s deleted\n", args[0])
+	// "destroying", not "deleted": the teardown is queued and a durable
+	// environment retires rather than disappearing. Saying "deleted" would
+	// promise something the control plane deliberately does not do.
+	fmt.Printf("Environment %s is being destroyed\n", args[0])
 }
 
 func cmdEnvs() {
